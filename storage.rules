@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow authorized admins to read and write to covers and products
+    match /covers/{category}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+                      (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
+                       request.auth.uid == 'c7EG7sjnBTVAH2oIf2G3vpdUkIH2');
+    }
+    
+    match /products/{category}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+                      (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
+                       request.auth.uid == 'c7EG7sjnBTVAH2oIf2G3vpdUkIH2');
+    }
+  }
+}

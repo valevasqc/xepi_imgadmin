@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="xepi_imgadmin">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Admin Xepi</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Firebase JS SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js"></script>
+
+  <!-- Firebase Configuration -->
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBXyL1InrEYCKZoInEsbg56A2xeGHh3wlo",
+      authDomain: "xepi-f5c22.firebaseapp.com",
+      databaseURL: "https://xepi-f5c22-default-rtdb.firebaseio.com",
+      projectId: "xepi-f5c22",
+      storageBucket: "xepi-f5c22.firebasestorage.app",
+      messagingSenderId: "709790473418",
+      appId: "1:709790473418:web:74fcdae8897682a25b2833",
+      measurementId: "G-7YD7FSHHNX"
+    };
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+  </script>
+</head>
+<body>
+<script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

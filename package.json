@@ -1,0 +1,20 @@
+{
+  "name": "xepi_imgadmin",
+  "version": "1.0.0",
+  "description": "A new Flutter project.",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "firebase-admin": "^13.3.0",
+    "uuid": "^11.1.0"
+  }
+}
