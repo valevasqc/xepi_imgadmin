@@ -41,3 +41,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Environment variables and sensitive configuration
+.env
+.env.local
+.env.*.local
+lib/firebase_options.dart
+web/firebase-config.js
