@@ -27,23 +27,24 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _storeStockController = TextEditingController(text: '0');
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final firebase_storage.FirebaseStorage _storage = firebase_storage.FirebaseStorage.instance;
+  final firebase_storage.FirebaseStorage _storage =
+      firebase_storage.FirebaseStorage.instance;
   final ImagePicker _imagePicker = ImagePicker();
-  
+
   String? _selectedCategoryId;
   String? _selectedCategoryCode;
   String? _selectedSubcategory;
   bool _isLoading = false;
   bool _isSaving = false;
   bool _isUploading = false;
-  
+
   List<Map<String, dynamic>> _categories = [];
   List<String> _availableSubcategories = [];
   List<String> _allTemas = [];
   List<String> _selectedTemas = [];
   List<String> _uploadedImages = [];
   int _selectedImageIndex = 0;
-  
+
   @override
   void initState() {
     super.initState();
@@ -55,7 +56,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
       final snapshot = await _firestore.collection('categories').get();
       setState(() {
@@ -65,11 +66,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
             'id': doc.id,
             'code': data['code'] ?? '',
             'name': data['name'] ?? '',
-            'subcategories': (data['subcategories'] as List?)?.cast<String>() ?? [],
+            'subcategories':
+                (data['subcategories'] as List?)?.cast<String>() ?? [],
             'defaultPrice': data['defaultPrice'],
           };
         }).toList();
-        _categories.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+        _categories.sort(
+            (a, b) => (a['name'] as String).compareTo(b['name'] as String));
         _isLoading = false;
       });
     } catch (e) {
@@ -79,19 +82,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
       });
     }
   }
-  
+
   void _onCategoryChanged(String? categoryId) {
     if (categoryId == null) return;
-    
+
     final category = _categories.firstWhere((c) => c['id'] == categoryId);
     setState(() {
       _selectedCategoryId = categoryId;
       _selectedCategoryCode = category['code'];
-      _availableSubcategories = (category['subcategories'] as List).cast<String>();
+      _availableSubcategories =
+          (category['subcategories'] as List).cast<String>();
       _selectedSubcategory = null; // Reset subcategory
     });
   }
-  
+
   Future<void> _loadTemas() async {
     try {
       final snapshot = await _firestore.collection('temas').get();
@@ -248,7 +252,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                             items: _categories.map((category) {
                                               return DropdownMenuItem<String>(
                                                 value: category['id'],
-                                                child: Text(category['name'] as String),
+                                                child: Text(
+                                                    category['name'] as String),
                                               );
                                             }).toList(),
                                             onChanged: _onCategoryChanged,
@@ -358,27 +363,33 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                     children: [
                                       Expanded(
                                         child: Autocomplete<String>(
-                                          optionsBuilder:
-                                              (TextEditingValue textEditingValue) {
+                                          optionsBuilder: (TextEditingValue
+                                              textEditingValue) {
                                             if (textEditingValue.text.isEmpty) {
-                                              return const Iterable<String>.empty();
+                                              return const Iterable<
+                                                  String>.empty();
                                             }
-                                            return _allTemas.where((String option) {
+                                            return _allTemas
+                                                .where((String option) {
                                               return option
                                                   .toLowerCase()
-                                                  .contains(textEditingValue.text
+                                                  .contains(textEditingValue
+                                                      .text
                                                       .toLowerCase());
                                             });
                                           },
                                           onSelected: (String selection) {
-                                            if (!_selectedTemas.contains(selection)) {
+                                            if (!_selectedTemas
+                                                .contains(selection)) {
                                               setState(() {
                                                 _selectedTemas.add(selection);
                                               });
                                             }
                                           },
-                                          fieldViewBuilder: (context, controller,
-                                              focusNode, onFieldSubmitted) {
+                                          fieldViewBuilder: (context,
+                                              controller,
+                                              focusNode,
+                                              onFieldSubmitted) {
                                             return TextFormField(
                                               controller: controller,
                                               focusNode: focusNode,
@@ -387,18 +398,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                                 hintText:
                                                     'Escribe para buscar o agregar',
                                                 suffixIcon: IconButton(
-                                                  icon: const Icon(Icons.add_rounded),
+                                                  icon: const Icon(
+                                                      Icons.add_rounded),
                                                   onPressed: () {
                                                     final newTema =
                                                         controller.text.trim();
                                                     if (newTema.isNotEmpty &&
                                                         !_selectedTemas
-                                                            .contains(newTema)) {
+                                                            .contains(
+                                                                newTema)) {
                                                       setState(() {
-                                                        _selectedTemas.add(newTema);
-                                                        if (!_allTemas
-                                                            .contains(newTema)) {
-                                                          _allTemas.add(newTema);
+                                                        _selectedTemas
+                                                            .add(newTema);
+                                                        if (!_allTemas.contains(
+                                                            newTema)) {
+                                                          _allTemas
+                                                              .add(newTema);
                                                           _allTemas.sort();
                                                         }
                                                       });
@@ -457,8 +472,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: AppTheme.spacingM),
                                     child: Text('x',
-                                        style: AppTheme.heading2
-                                            .copyWith(color: AppTheme.mediumGray)),
+                                        style: AppTheme.heading2.copyWith(
+                                            color: AppTheme.mediumGray)),
                                   ),
                                   Expanded(
                                     child: TextFormField(
@@ -497,9 +512,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                         hintText: 'Opcional',
                                         prefixText: 'Q ',
                                       ),
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
                                       inputFormatters: [
-                                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                                        FilteringTextInputFormatter.allow(
+                                            RegExp(r'^\d*\.?\d{0,2}')),
                                       ],
                                     ),
                                   ),
@@ -529,15 +547,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
                             children: [
                               // Upload button
                               OutlinedButton.icon(
-                                onPressed: _isUploading ? null : _pickAndUploadImages,
+                                onPressed:
+                                    _isUploading ? null : _pickAndUploadImages,
                                 icon: _isUploading
                                     ? const SizedBox(
                                         width: 20,
                                         height: 20,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
                                       )
-                                    : const Icon(Icons.add_photo_alternate_rounded),
-                                label: Text(_isUploading ? 'Subiendo...' : 'Agregar Imágenes'),
+                                    : const Icon(
+                                        Icons.add_photo_alternate_rounded),
+                                label: Text(_isUploading
+                                    ? 'Subiendo...'
+                                    : 'Agregar Imágenes'),
                               ),
                               if (_uploadedImages.isNotEmpty) ...[
                                 const SizedBox(height: AppTheme.spacingL),
@@ -547,7 +570,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                   decoration: BoxDecoration(
                                     color: AppTheme.backgroundGray,
                                     borderRadius: AppTheme.borderRadiusMedium,
-                                    border: Border.all(color: AppTheme.lightGray),
+                                    border:
+                                        Border.all(color: AppTheme.lightGray),
                                   ),
                                   child: ClipRRect(
                                     borderRadius: AppTheme.borderRadiusMedium,
@@ -565,7 +589,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                     scrollDirection: Axis.horizontal,
                                     itemCount: _uploadedImages.length,
                                     itemBuilder: (context, index) {
-                                      final isSelected = index == _selectedImageIndex;
+                                      final isSelected =
+                                          index == _selectedImageIndex;
                                       return GestureDetector(
                                         onTap: () {
                                           setState(() {
@@ -575,16 +600,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                         child: Container(
                                           width: 80,
                                           height: 80,
-                                          margin: const EdgeInsets.only(right: AppTheme.spacingS),
+                                          margin: const EdgeInsets.only(
+                                              right: AppTheme.spacingS),
                                           decoration: BoxDecoration(
                                             border: Border.all(
-                                              color: isSelected ? AppTheme.blue : AppTheme.lightGray,
+                                              color: isSelected
+                                                  ? AppTheme.blue
+                                                  : AppTheme.lightGray,
                                               width: isSelected ? 3 : 1,
                                             ),
-                                            borderRadius: AppTheme.borderRadiusSmall,
+                                            borderRadius:
+                                                AppTheme.borderRadiusSmall,
                                           ),
                                           child: ClipRRect(
-                                            borderRadius: AppTheme.borderRadiusSmall,
+                                            borderRadius:
+                                                AppTheme.borderRadiusSmall,
                                             child: Stack(
                                               children: [
                                                 Image.network(
@@ -598,14 +628,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                                     top: 2,
                                                     right: 2,
                                                     child: Container(
-                                                      padding: const EdgeInsets.all(2),
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                              2),
                                                       decoration: BoxDecoration(
                                                         color: AppTheme.yellow,
-                                                        borderRadius: BorderRadius.circular(10),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(10),
                                                       ),
                                                       child: const Text(
                                                         '⭐',
-                                                        style: TextStyle(fontSize: 12),
+                                                        style: TextStyle(
+                                                            fontSize: 12),
                                                       ),
                                                     ),
                                                   ),
@@ -647,8 +682,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                       ),
                                     )
                                   : const Icon(Icons.save_rounded),
-                              label: Text(
-                                  _isSaving ? 'Guardando...' : 'Guardar Producto'),
+                              label: Text(_isSaving
+                                  ? 'Guardando...'
+                                  : 'Guardar Producto'),
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: AppTheme.spacingXL,
@@ -834,22 +870,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     if (_isSaving) return;
-    
+
     setState(() {
       _isSaving = true;
     });
 
     try {
       final barcode = _barcodeController.text.trim();
-      
+
       // Check if barcode already exists
-      final existingProduct = await _firestore
-          .collection('products')
-          .doc(barcode)
-          .get();
-      
+      final existingProduct =
+          await _firestore.collection('products').doc(barcode).get();
+
       if (existingProduct.exists) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -862,8 +896,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   Expanded(
                     child: Text(
                       'Ya existe un producto con el código $barcode',
-                      style: AppTheme.bodySmall
-                          .copyWith(color: AppTheme.white),
+                      style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
                     ),
                   ),
                 ],
@@ -880,12 +913,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
       }
 
       // Get category name
-      final category = _categories.firstWhere((c) => c['id'] == _selectedCategoryId);
+      final category =
+          _categories.firstWhere((c) => c['id'] == _selectedCategoryId);
       final categoryName = category['name'] as String;
-      
+
       // Build size string
       String? sizeString;
-      if (_widthController.text.isNotEmpty && _heightController.text.isNotEmpty) {
+      if (_widthController.text.isNotEmpty &&
+          _heightController.text.isNotEmpty) {
         sizeString = '${_widthController.text} x ${_heightController.text} cms';
       } else if (_widthController.text.isNotEmpty) {
         sizeString = '${_widthController.text} cms';
@@ -905,8 +940,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
         'stockWarehouse': int.parse(_warehouseStockController.text),
         'stockStore': int.parse(_storeStockController.text),
         'size': sizeString,
-        'width': _widthController.text.isNotEmpty ? int.tryParse(_widthController.text) : null,
-        'height': _heightController.text.isNotEmpty ? int.tryParse(_heightController.text) : null,
+        'width': _widthController.text.isNotEmpty
+            ? int.tryParse(_widthController.text)
+            : null,
+        'height': _heightController.text.isNotEmpty
+            ? int.tryParse(_heightController.text)
+            : null,
         'color': _colorController.text.trim().isNotEmpty
             ? _colorController.text.trim()
             : null,
@@ -924,13 +963,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
       // Save to Firestore
       await _firestore.collection('products').doc(barcode).set(productData);
-      
+
       // Update temas collection for new temas
       final batch = _firestore.batch();
       for (final tema in _selectedTemas) {
         final temaRef = _firestore.collection('temas').doc(tema);
         final temaDoc = await temaRef.get();
-        
+
         if (!temaDoc.exists) {
           batch.set(temaRef, {
             'name': tema,
@@ -957,8 +996,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 Expanded(
                   child: Text(
                     'Producto guardado exitosamente',
-                    style:
-                        AppTheme.bodySmall.copyWith(color: AppTheme.white),
+                    style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
                   ),
                 ),
               ],
@@ -978,14 +1016,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.error_outline_rounded,
-                    color: AppTheme.white),
+                const Icon(Icons.error_outline_rounded, color: AppTheme.white),
                 const SizedBox(width: AppTheme.spacingM),
                 Expanded(
                   child: Text(
                     'Error al guardar producto: $e',
-                    style:
-                        AppTheme.bodySmall.copyWith(color: AppTheme.white),
+                    style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
                   ),
                 ),
               ],

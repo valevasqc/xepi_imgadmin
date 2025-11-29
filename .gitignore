@@ -52,3 +52,18 @@ web/firebase-config.js
 
 # Firebase
 serviceAccountKey.json
+.firebase/
+
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+
+# Excel/CSV data files
+*.xlsx
+*.xls
+*.csv
+
+# Migration backups
+*.backup
+*.bak
