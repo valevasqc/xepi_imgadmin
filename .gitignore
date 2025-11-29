@@ -50,7 +50,7 @@ app.*.map.json
 lib/firebase_options.dart
 web/firebase-config.js
 
-# Firebase
+# Firebase (keep .example files, ignore actual credentials)
 serviceAccountKey.json
 .firebase/
 
