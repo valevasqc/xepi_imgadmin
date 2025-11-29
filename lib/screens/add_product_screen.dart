@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 
 /// Add new product screen with barcode scanning
@@ -19,9 +20,63 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _colorController = TextEditingController();
   final _notesController = TextEditingController();
 
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
   String? _selectedCategory;
+  String? _selectedCategoryId;
   int _warehouseStock = 0;
   int _storeStock = 0;
+  bool _isLoading = false;
+  bool _isSaving = false;
+  
+  List<Map<String, dynamic>> _categories = [];
+  List<String> _allTemas = [];
+  List<String> _selectedTemas = [];
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+    _loadTemas();
+  }
+
+  Future<void> _loadCategories() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      final snapshot = await _firestore.collection('categories').get();
+      setState(() {
+        _categories = snapshot.docs.map((doc) {
+          final data = doc.data();
+          return {
+            'id': doc.id,
+            'name': data['name'] ?? '',
+            'defaultPrice': data['defaultPrice'],
+          };
+        }).toList();
+        _categories.sort((a, b) => a['name'].compareTo(b['name']));
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading categories: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+  
+  Future<void> _loadTemas() async {
+    try {
+      final snapshot = await _firestore.collection('temas').get();
+      setState(() {
+        _allTemas = snapshot.docs.map((doc) => doc.id).toList()..sort();
+      });
+    } catch (e) {
+      debugPrint('Error loading temas: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -153,41 +208,36 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                   ),
                                   const SizedBox(width: AppTheme.spacingL),
                                   Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      initialValue: _selectedCategory,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Categoría',
-                                      ),
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: 'Cuadros 20x30',
-                                          child: Text('Cuadros 20x30 cms'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'Cuadros 30x40',
-                                          child: Text('Cuadros 30x40 cms'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'Círculos',
-                                          child: Text('Círculos 30 cms'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'Juguetes',
-                                          child: Text('Juguetes Educativos'),
-                                        ),
-                                      ],
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _selectedCategory = value;
-                                        });
-                                      },
-                                      validator: (value) {
-                                        if (value == null) {
-                                          return 'Selecciona una categoría';
-                                        }
-                                        return null;
-                                      },
-                                    ),
+                                    child: _isLoading
+                                        ? const Center(
+                                            child: CircularProgressIndicator(),
+                                          )
+                                        : DropdownButtonFormField<String>(
+                                            value: _selectedCategoryId,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Categoría',
+                                            ),
+                                            items: _categories.map((category) {
+                                              return DropdownMenuItem<String>(
+                                                value: category['id'],
+                                                child: Text(category['name']),
+                                              );
+                                            }).toList(),
+                                            onChanged: (value) {
+                                              setState(() {
+                                                _selectedCategoryId = value;
+                                                _selectedCategory = _categories
+                                                    .firstWhere((c) =>
+                                                        c['id'] == value)['name'];
+                                              });
+                                            },
+                                            validator: (value) {
+                                              if (value == null) {
+                                                return 'Selecciona una categoría';
+                                              }
+                                              return null;
+                                            },
+                                          ),
                                   ),
                                 ],
                               ),
@@ -238,18 +288,96 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           title: 'DETALLES ADICIONALES (Opcional)',
                           child: Column(
                             children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Autocomplete<String>(
+                                          optionsBuilder:
+                                              (TextEditingValue textEditingValue) {
+                                            if (textEditingValue.text.isEmpty) {
+                                              return const Iterable<String>.empty();
+                                            }
+                                            return _allTemas.where((String option) {
+                                              return option
+                                                  .toLowerCase()
+                                                  .contains(textEditingValue.text
+                                                      .toLowerCase());
+                                            });
+                                          },
+                                          onSelected: (String selection) {
+                                            if (!_selectedTemas.contains(selection)) {
+                                              setState(() {
+                                                _selectedTemas.add(selection);
+                                              });
+                                            }
+                                            _temaController.clear();
+                                          },
+                                          fieldViewBuilder: (context, controller,
+                                              focusNode, onFieldSubmitted) {
+                                            _temaController.text = controller.text;
+                                            return TextFormField(
+                                              controller: controller,
+                                              focusNode: focusNode,
+                                              decoration: InputDecoration(
+                                                labelText: 'Temas',
+                                                hintText:
+                                                    'Escribe para buscar o agregar',
+                                                suffixIcon: IconButton(
+                                                  icon: const Icon(Icons.add_rounded),
+                                                  onPressed: () {
+                                                    final newTema =
+                                                        controller.text.trim();
+                                                    if (newTema.isNotEmpty &&
+                                                        !_selectedTemas
+                                                            .contains(newTema)) {
+                                                      setState(() {
+                                                        _selectedTemas.add(newTema);
+                                                        if (!_allTemas
+                                                            .contains(newTema)) {
+                                                          _allTemas.add(newTema);
+                                                          _allTemas.sort();
+                                                        }
+                                                      });
+                                                      controller.clear();
+                                                    }
+                                                  },
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_selectedTemas.isNotEmpty) ...{
+                                    const SizedBox(height: AppTheme.spacingM),
+                                    Wrap(
+                                      spacing: AppTheme.spacingS,
+                                      runSpacing: AppTheme.spacingS,
+                                      children: _selectedTemas
+                                          .map((tema) => Chip(
+                                                label: Text(tema),
+                                                deleteIcon: const Icon(
+                                                  Icons.close_rounded,
+                                                  size: 18,
+                                                ),
+                                                onDeleted: () {
+                                                  setState(() {
+                                                    _selectedTemas.remove(tema);
+                                                  });
+                                                },
+                                              ))
+                                          .toList(),
+                                    ),
+                                  },
+                                ],
+                              ),
+                              const SizedBox(height: AppTheme.spacingM),
                               Row(
                                 children: [
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller: _temaController,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Tema',
-                                        hintText: 'Ej: Paisaje, Abstracto',
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: AppTheme.spacingL),
                                   Expanded(
                                     child: TextFormField(
                                       controller: _sizeController,
@@ -337,9 +465,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
                             ),
                             const SizedBox(width: AppTheme.spacingM),
                             ElevatedButton.icon(
-                              onPressed: _saveProduct,
-                              icon: const Icon(Icons.save_rounded),
-                              label: const Text('Guardar Producto'),
+                              onPressed: _isSaving ? null : _saveProduct,
+                              icon: _isSaving
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                AppTheme.white),
+                                      ),
+                                    )
+                                  : const Icon(Icons.save_rounded),
+                              label: Text(
+                                  _isSaving ? 'Guardando...' : 'Guardar Producto'),
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: AppTheme.spacingXL,
@@ -448,22 +588,156 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  void _saveProduct() {
-    if (_formKey.currentState!.validate()) {
-      // TODO: Save to Firestore
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Producto guardado exitosamente'),
-          backgroundColor: AppTheme.success,
-        ),
-      );
+  Future<void> _saveProduct() async {
+    if (!_formKey.currentState!.validate()) return;
+    
+    if (_isSaving) return;
+    
+    setState(() {
+      _isSaving = true;
+    });
 
-      // Go back after a short delay
-      Future.delayed(const Duration(seconds: 1), () {
+    try {
+      final barcode = _barcodeController.text.trim();
+      
+      // Check if barcode already exists
+      final existingProduct = await _firestore
+          .collection('products')
+          .doc(barcode)
+          .get();
+      
+      if (existingProduct.exists) {
         if (mounted) {
-          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded,
+                      color: AppTheme.white),
+                  const SizedBox(width: AppTheme.spacingM),
+                  Expanded(
+                    child: Text(
+                      'Ya existe un producto con el código $barcode',
+                      style: AppTheme.bodySmall
+                          .copyWith(color: AppTheme.white),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppTheme.danger,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
         }
-      });
+        setState(() {
+          _isSaving = false;
+        });
+        return;
+      }
+
+      // Create product document
+      final productData = {
+        'barcode': barcode,
+        'name': _nameController.text.trim(),
+        'warehouseCode': _warehouseCodeController.text.trim(),
+        'categoryId': _selectedCategoryId,
+        'categoryName': _selectedCategory,
+        'stockWarehouse': _warehouseStock,
+        'stockStore': _storeStock,
+        'size': _sizeController.text.trim().isNotEmpty
+            ? _sizeController.text.trim()
+            : null,
+        'color': _colorController.text.trim().isNotEmpty
+            ? _colorController.text.trim()
+            : null,
+        'notes': _notesController.text.trim().isNotEmpty
+            ? _notesController.text.trim()
+            : null,
+        'temas': _selectedTemas.isNotEmpty ? _selectedTemas : [],
+        'images': [],
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Save to Firestore
+      await _firestore.collection('products').doc(barcode).set(productData);
+      
+      // Update temas collection for new temas
+      final batch = _firestore.batch();
+      for (final tema in _selectedTemas) {
+        final temaRef = _firestore.collection('temas').doc(tema);
+        final temaDoc = await temaRef.get();
+        
+        if (!temaDoc.exists) {
+          batch.set(temaRef, {
+            'name': tema,
+            'productCount': 1,
+            'createdAt': FieldValue.serverTimestamp(),
+            'lastUsed': FieldValue.serverTimestamp(),
+          });
+        } else {
+          batch.update(temaRef, {
+            'productCount': FieldValue.increment(1),
+            'lastUsed': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: AppTheme.white),
+                const SizedBox(width: AppTheme.spacingM),
+                Expanded(
+                  child: Text(
+                    'Producto guardado exitosamente',
+                    style:
+                        AppTheme.bodySmall.copyWith(color: AppTheme.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        // Go back
+        Navigator.pop(context, true); // Return true to indicate success
+      }
+    } catch (e) {
+      debugPrint('Error saving product: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded,
+                    color: AppTheme.white),
+                const SizedBox(width: AppTheme.spacingM),
+                Expanded(
+                  child: Text(
+                    'Error al guardar producto: $e',
+                    style:
+                        AppTheme.bodySmall.copyWith(color: AppTheme.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 }

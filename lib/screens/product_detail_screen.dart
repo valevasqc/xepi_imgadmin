@@ -2762,7 +2762,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           style: AppTheme.heading3,
         ),
         content: Text(
-          'Esta acción no se puede deshacer. ¿Estás seguro de que deseas eliminar este producto?',
+          'Esta acción no se puede deshacer. Se eliminarán:\n'
+          '• El producto de la base de datos\n'
+          '• Todas las imágenes asociadas\n'
+          '• La referencia en los temas\n\n'
+          '¿Estás seguro?',
           style: AppTheme.bodyMedium,
         ),
         actions: [
@@ -2771,17 +2775,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            onPressed: () {
-              // TODO: Delete product
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Go back to list
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Producto eliminado'),
-                  backgroundColor: AppTheme.danger,
-                ),
-              );
-            },
+            onPressed: () => _deleteProduct(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.danger,
             ),
@@ -2790,5 +2784,134 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _deleteProduct() async {
+    // Close dialog
+    Navigator.pop(context);
+
+    // Show loading
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.white),
+              ),
+            ),
+            const SizedBox(width: AppTheme.spacingM),
+            Text(
+              'Eliminando producto...',
+              style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
+            ),
+          ],
+        ),
+        duration: const Duration(seconds: 30),
+      ),
+    );
+
+    try {
+      final productId = widget.productId;
+
+      // Get product data to access images and temas
+      final productDoc =
+          await _firestore.collection('products').doc(productId).get();
+      if (!productDoc.exists) {
+        throw Exception('Producto no encontrado');
+      }
+
+      final productData = productDoc.data()!;
+      final images = (productData['images'] as List?)?.cast<String>() ?? [];
+      final temas = (productData['temas'] as List?)?.cast<String>() ?? [];
+
+      // 1. Delete all images from Storage
+      for (final imageUrl in images) {
+        try {
+          final ref = _storage.refFromURL(imageUrl);
+          await ref.delete();
+        } catch (e) {
+          debugPrint('Error deleting image: $e');
+          // Continue even if image delete fails (might already be deleted)
+        }
+      }
+
+      // 2. Update temas collection (decrement productCount)
+      final batch = _firestore.batch();
+      for (final tema in temas) {
+        final temaRef = _firestore.collection('temas').doc(tema);
+        final temaDoc = await temaRef.get();
+
+        if (temaDoc.exists) {
+          final currentCount = temaDoc.data()?['productCount'] ?? 0;
+          if (currentCount <= 1) {
+            // If this was the last product with this tema, delete the tema
+            batch.delete(temaRef);
+          } else {
+            // Otherwise just decrement the count
+            batch.update(temaRef, {
+              'productCount': FieldValue.increment(-1),
+            });
+          }
+        }
+      }
+      await batch.commit();
+
+      // 3. Delete product document from Firestore
+      await _firestore.collection('products').doc(productId).delete();
+
+      // Success!
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: AppTheme.white),
+                const SizedBox(width: AppTheme.spacingM),
+                Expanded(
+                  child: Text(
+                    'Producto eliminado exitosamente',
+                    style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
+        // Go back to list
+        Navigator.pop(context, true); // Return true to indicate deletion
+      }
+    } catch (e) {
+      debugPrint('Error deleting product: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: AppTheme.white),
+                const SizedBox(width: AppTheme.spacingM),
+                Expanded(
+                  child: Text(
+                    'Error al eliminar producto: $e',
+                    style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 }
