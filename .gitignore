@@ -48,3 +48,6 @@ app.*.map.json
 .env.*.local
 lib/firebase_options.dart
 web/firebase-config.js
+
+# Firebase
+serviceAccountKey.json

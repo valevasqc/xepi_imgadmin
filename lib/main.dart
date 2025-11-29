@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-import 'admin_login.dart';
-import 'admin_dashboard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// gsutil cors set cors.json gs://xepi-f5c22.firebasestorage.app
-// firebase deploy --only hosting:xepi-admin
-// nvm install 18
-// nvm use 18
+import 'firebase_options.dart';
+import 'config/app_theme.dart';
+import 'screens/admin_login.dart';
+import 'screens/main_layout.dart';
+// DEPRECATED: Old admin dashboard - keeping for reference
+// import 'screens/admin_dashboard.dart' as legacy;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,19 +23,24 @@ class AdminApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Xepi Admin',
-      theme: ThemeData(
-        primarySwatch: Colors.blueGrey,
-        useMaterial3: true,
-      ),
+      title: 'XEPI Admin',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Scaffold(
+              backgroundColor: AppTheme.backgroundGray,
+              body: Center(
+                child: CircularProgressIndicator(
+                  color: AppTheme.blue,
+                ),
+              ),
+            );
           }
           if (snapshot.hasData) {
-            return const AdminDashboard();
+            return const MainLayout();
           }
           return const AdminLoginScreen();
         },
