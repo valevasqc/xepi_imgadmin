@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
+import 'package:image_picker/image_picker.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 
 /// Add new product screen with barcode scanning
@@ -15,23 +18,31 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _barcodeController = TextEditingController();
   final _nameController = TextEditingController();
   final _warehouseCodeController = TextEditingController();
-  final _temaController = TextEditingController();
-  final _sizeController = TextEditingController();
+  final _widthController = TextEditingController();
+  final _heightController = TextEditingController();
   final _colorController = TextEditingController();
   final _notesController = TextEditingController();
+  final _priceOverrideController = TextEditingController();
+  final _warehouseStockController = TextEditingController(text: '0');
+  final _storeStockController = TextEditingController(text: '0');
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final firebase_storage.FirebaseStorage _storage = firebase_storage.FirebaseStorage.instance;
+  final ImagePicker _imagePicker = ImagePicker();
   
-  String? _selectedCategory;
   String? _selectedCategoryId;
-  int _warehouseStock = 0;
-  int _storeStock = 0;
+  String? _selectedCategoryCode;
+  String? _selectedSubcategory;
   bool _isLoading = false;
   bool _isSaving = false;
+  bool _isUploading = false;
   
   List<Map<String, dynamic>> _categories = [];
+  List<String> _availableSubcategories = [];
   List<String> _allTemas = [];
   List<String> _selectedTemas = [];
+  List<String> _uploadedImages = [];
+  int _selectedImageIndex = 0;
   
   @override
   void initState() {
@@ -52,11 +63,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
           final data = doc.data();
           return {
             'id': doc.id,
+            'code': data['code'] ?? '',
             'name': data['name'] ?? '',
+            'subcategories': (data['subcategories'] as List?)?.cast<String>() ?? [],
             'defaultPrice': data['defaultPrice'],
           };
         }).toList();
-        _categories.sort((a, b) => a['name'].compareTo(b['name']));
+        _categories.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
         _isLoading = false;
       });
     } catch (e) {
@@ -65,6 +78,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
         _isLoading = false;
       });
     }
+  }
+  
+  void _onCategoryChanged(String? categoryId) {
+    if (categoryId == null) return;
+    
+    final category = _categories.firstWhere((c) => c['id'] == categoryId);
+    setState(() {
+      _selectedCategoryId = categoryId;
+      _selectedCategoryCode = category['code'];
+      _availableSubcategories = (category['subcategories'] as List).cast<String>();
+      _selectedSubcategory = null; // Reset subcategory
+    });
   }
   
   Future<void> _loadTemas() async {
@@ -83,10 +108,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _barcodeController.dispose();
     _nameController.dispose();
     _warehouseCodeController.dispose();
-    _temaController.dispose();
-    _sizeController.dispose();
+    _widthController.dispose();
+    _heightController.dispose();
     _colorController.dispose();
     _notesController.dispose();
+    _priceOverrideController.dispose();
+    _warehouseStockController.dispose();
+    _storeStockController.dispose();
     super.dispose();
   }
 
@@ -220,17 +248,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                             items: _categories.map((category) {
                                               return DropdownMenuItem<String>(
                                                 value: category['id'],
-                                                child: Text(category['name']),
+                                                child: Text(category['name'] as String),
                                               );
                                             }).toList(),
-                                            onChanged: (value) {
-                                              setState(() {
-                                                _selectedCategoryId = value;
-                                                _selectedCategory = _categories
-                                                    .firstWhere((c) =>
-                                                        c['id'] == value)['name'];
-                                              });
-                                            },
+                                            onChanged: _onCategoryChanged,
                                             validator: (value) {
                                               if (value == null) {
                                                 return 'Selecciona una categoría';
@@ -241,6 +262,26 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                   ),
                                 ],
                               ),
+                              if (_availableSubcategories.isNotEmpty) ...[
+                                const SizedBox(height: AppTheme.spacingM),
+                                DropdownButtonFormField<String>(
+                                  value: _selectedSubcategory,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Subcategoría',
+                                  ),
+                                  items: _availableSubcategories.map((sub) {
+                                    return DropdownMenuItem<String>(
+                                      value: sub,
+                                      child: Text(sub),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _selectedSubcategory = value;
+                                    });
+                                  },
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -253,28 +294,50 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           child: Row(
                             children: [
                               Expanded(
-                                child: _buildStockInput(
-                                  label: 'Bodega',
-                                  value: _warehouseStock,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _warehouseStock = value;
-                                    });
+                                child: TextFormField(
+                                  controller: _warehouseStockController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Stock Bodega',
+                                    hintText: '0',
+                                    prefixIcon: Icon(Icons.warehouse_rounded),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Requerido';
+                                    }
+                                    if (int.tryParse(value) == null) {
+                                      return 'Debe ser un número';
+                                    }
+                                    return null;
                                   },
-                                  icon: Icons.warehouse_rounded,
                                 ),
                               ),
                               const SizedBox(width: AppTheme.spacingL),
                               Expanded(
-                                child: _buildStockInput(
-                                  label: 'Tienda',
-                                  value: _storeStock,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _storeStock = value;
-                                    });
+                                child: TextFormField(
+                                  controller: _storeStockController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Stock Tienda',
+                                    hintText: '0',
+                                    prefixIcon: Icon(Icons.store_rounded),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Requerido';
+                                    }
+                                    if (int.tryParse(value) == null) {
+                                      return 'Debe ser un número';
+                                    }
+                                    return null;
                                   },
-                                  icon: Icons.store_rounded,
                                 ),
                               ),
                             ],
@@ -313,11 +376,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                                 _selectedTemas.add(selection);
                                               });
                                             }
-                                            _temaController.clear();
                                           },
                                           fieldViewBuilder: (context, controller,
                                               focusNode, onFieldSubmitted) {
-                                            _temaController.text = controller.text;
                                             return TextFormField(
                                               controller: controller,
                                               focusNode: focusNode,
@@ -380,22 +441,69 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                 children: [
                                   Expanded(
                                     child: TextFormField(
-                                      controller: _sizeController,
+                                      controller: _widthController,
                                       decoration: const InputDecoration(
-                                        labelText: 'Tamaño',
-                                        hintText: 'Ej: 20x30 cms',
+                                        labelText: 'Ancho',
+                                        hintText: 'Ej: 20',
+                                        suffixText: 'cms',
                                       ),
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: AppTheme.spacingM),
+                                    child: Text('x',
+                                        style: AppTheme.heading2
+                                            .copyWith(color: AppTheme.mediumGray)),
+                                  ),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _heightController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Alto',
+                                        hintText: 'Ej: 30',
+                                        suffixText: 'cms',
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
                                     ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: AppTheme.spacingM),
-                              TextFormField(
-                                controller: _colorController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Color',
-                                  hintText: 'Ej: Dorado, Plateado',
-                                ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _colorController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Color',
+                                        hintText: 'Ej: Dorado, Plateado',
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppTheme.spacingL),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _priceOverrideController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Precio Override',
+                                        hintText: 'Opcional',
+                                        prefixText: 'Q ',
+                                      ),
+                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: AppTheme.spacingM),
                               TextFormField(
@@ -415,41 +523,102 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
                         // Images Section
                         _buildSection(
-                          title: 'IMÁGENES',
-                          child: Container(
-                            padding: const EdgeInsets.all(AppTheme.spacingXL),
-                            decoration: BoxDecoration(
-                              color: AppTheme.backgroundGray,
-                              borderRadius: AppTheme.borderRadiusMedium,
-                              border: Border.all(
-                                color: AppTheme.lightGray,
-                                style: BorderStyle.solid,
-                                width: 2,
+                          title: 'IMÁGENES (Opcional)',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Upload button
+                              OutlinedButton.icon(
+                                onPressed: _isUploading ? null : _pickAndUploadImages,
+                                icon: _isUploading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.add_photo_alternate_rounded),
+                                label: Text(_isUploading ? 'Subiendo...' : 'Agregar Imágenes'),
                               ),
-                            ),
-                            child: Column(
-                              children: [
-                                const Icon(
-                                  Icons.add_photo_alternate_rounded,
-                                  size: 48,
-                                  color: AppTheme.mediumGray,
+                              if (_uploadedImages.isNotEmpty) ...[
+                                const SizedBox(height: AppTheme.spacingL),
+                                // Image preview
+                                Container(
+                                  height: 300,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.backgroundGray,
+                                    borderRadius: AppTheme.borderRadiusMedium,
+                                    border: Border.all(color: AppTheme.lightGray),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: AppTheme.borderRadiusMedium,
+                                    child: Image.network(
+                                      _uploadedImages[_selectedImageIndex],
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(height: AppTheme.spacingM),
-                                Text(
-                                  'Agregar imágenes después de crear el producto',
-                                  style: AppTheme.bodyMedium.copyWith(
-                                    color: AppTheme.mediumGray,
+                                // Thumbnails
+                                SizedBox(
+                                  height: 80,
+                                  child: ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _uploadedImages.length,
+                                    itemBuilder: (context, index) {
+                                      final isSelected = index == _selectedImageIndex;
+                                      return GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedImageIndex = index;
+                                          });
+                                        },
+                                        child: Container(
+                                          width: 80,
+                                          height: 80,
+                                          margin: const EdgeInsets.only(right: AppTheme.spacingS),
+                                          decoration: BoxDecoration(
+                                            border: Border.all(
+                                              color: isSelected ? AppTheme.blue : AppTheme.lightGray,
+                                              width: isSelected ? 3 : 1,
+                                            ),
+                                            borderRadius: AppTheme.borderRadiusSmall,
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius: AppTheme.borderRadiusSmall,
+                                            child: Stack(
+                                              children: [
+                                                Image.network(
+                                                  _uploadedImages[index],
+                                                  fit: BoxFit.cover,
+                                                  width: 80,
+                                                  height: 80,
+                                                ),
+                                                if (index == 0)
+                                                  Positioned(
+                                                    top: 2,
+                                                    right: 2,
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(2),
+                                                      decoration: BoxDecoration(
+                                                        color: AppTheme.yellow,
+                                                        borderRadius: BorderRadius.circular(10),
+                                                      ),
+                                                      child: const Text(
+                                                        '⭐',
+                                                        style: TextStyle(fontSize: 12),
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
                                   ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: AppTheme.spacingS),
-                                Text(
-                                  'Podrás subir imágenes en la página de detalles',
-                                  style: AppTheme.bodySmall,
-                                  textAlign: TextAlign.center,
                                 ),
                               ],
-                            ),
+                            ],
                           ),
                         ),
 
@@ -529,63 +698,138 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  Widget _buildStockInput({
-    required String label,
-    required int value,
-    required ValueChanged<int> onChanged,
-    required IconData icon,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.spacingL),
-      decoration: BoxDecoration(
-        color: AppTheme.backgroundGray,
-        borderRadius: AppTheme.borderRadiusMedium,
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: AppTheme.blue, size: 32),
-          const SizedBox(height: AppTheme.spacingM),
-          Text(
-            label,
-            style: AppTheme.bodyMedium.copyWith(
-              color: AppTheme.mediumGray,
+  Future<void> _pickAndUploadImages() async {
+    setState(() {
+      _isUploading = true;
+    });
+
+    try {
+      // Pick multiple images
+      final List<XFile> images = await _imagePicker.pickMultiImage();
+
+      if (images.isEmpty) {
+        setState(() {
+          _isUploading = false;
+        });
+        return;
+      }
+
+      // Show progress
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.white),
+                  ),
+                ),
+                const SizedBox(width: AppTheme.spacingM),
+                Text(
+                  'Subiendo ${images.length} imagen(es)...',
+                  style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
+                ),
+              ],
             ),
+            duration: const Duration(seconds: 30),
           ),
-          const SizedBox(height: AppTheme.spacingM),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                onPressed: () {
-                  if (value > 0) onChanged(value - 1);
-                },
-                icon: const Icon(Icons.remove_rounded),
-                style: IconButton.styleFrom(
-                  backgroundColor: AppTheme.white,
-                  foregroundColor: AppTheme.darkGray,
+        );
+      }
+
+      // Use temporary barcode for upload path
+      final barcode = _barcodeController.text.trim().isNotEmpty
+          ? _barcodeController.text.trim()
+          : 'temp_${DateTime.now().millisecondsSinceEpoch}';
+
+      final List<String> uploadedUrls = [];
+
+      for (final image in images) {
+        final bytes = await image.readAsBytes();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final fileName = '${barcode}_${timestamp}_${image.name}';
+        final ref = _storage.ref().child('products/$barcode/$fileName');
+
+        // Upload with retry
+        int retries = 0;
+        bool uploadSuccess = false;
+        String? downloadUrl;
+
+        while (retries < 3 && !uploadSuccess) {
+          try {
+            await ref.putData(
+              bytes,
+              firebase_storage.SettableMetadata(contentType: 'image/jpeg'),
+            );
+            downloadUrl = await ref.getDownloadURL();
+            uploadedUrls.add(downloadUrl);
+            uploadSuccess = true;
+          } catch (e) {
+            retries++;
+            if (retries >= 3) {
+              throw Exception('Error después de 3 intentos: $e');
+            }
+            await Future.delayed(Duration(seconds: retries));
+          }
+        }
+      }
+
+      setState(() {
+        _uploadedImages.addAll(uploadedUrls);
+        _isUploading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: AppTheme.white),
+                const SizedBox(width: AppTheme.spacingM),
+                Text(
+                  '${images.length} imagen(es) subida(s) exitosamente',
+                  style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
                 ),
-              ),
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppTheme.spacingL),
-                child: Text(
-                  '$value',
-                  style: AppTheme.heading2,
-                ),
-              ),
-              IconButton(
-                onPressed: () => onChanged(value + 1),
-                icon: const Icon(Icons.add_rounded),
-                style: IconButton.styleFrom(
-                  backgroundColor: AppTheme.blue,
-                  foregroundColor: AppTheme.white,
-                ),
-              ),
-            ],
+              ],
+            ),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
           ),
-        ],
-      ),
-    );
+        );
+      }
+    } catch (e) {
+      debugPrint('Error uploading images: $e');
+      setState(() {
+        _isUploading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: AppTheme.white),
+                const SizedBox(width: AppTheme.spacingM),
+                Expanded(
+                  child: Text(
+                    'Error al subir imágenes: $e',
+                    style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _saveProduct() async {
@@ -635,26 +879,45 @@ class _AddProductScreenState extends State<AddProductScreen> {
         return;
       }
 
+      // Get category name
+      final category = _categories.firstWhere((c) => c['id'] == _selectedCategoryId);
+      final categoryName = category['name'] as String;
+      
+      // Build size string
+      String? sizeString;
+      if (_widthController.text.isNotEmpty && _heightController.text.isNotEmpty) {
+        sizeString = '${_widthController.text} x ${_heightController.text} cms';
+      } else if (_widthController.text.isNotEmpty) {
+        sizeString = '${_widthController.text} cms';
+      } else if (_heightController.text.isNotEmpty) {
+        sizeString = '${_heightController.text} cms';
+      }
+
       // Create product document
       final productData = {
         'barcode': barcode,
         'name': _nameController.text.trim(),
         'warehouseCode': _warehouseCodeController.text.trim(),
         'categoryId': _selectedCategoryId,
-        'categoryName': _selectedCategory,
-        'stockWarehouse': _warehouseStock,
-        'stockStore': _storeStock,
-        'size': _sizeController.text.trim().isNotEmpty
-            ? _sizeController.text.trim()
-            : null,
+        'categoryCode': _selectedCategoryCode,
+        'categoryName': categoryName,
+        'subcategory': _selectedSubcategory,
+        'stockWarehouse': int.parse(_warehouseStockController.text),
+        'stockStore': int.parse(_storeStockController.text),
+        'size': sizeString,
+        'width': _widthController.text.isNotEmpty ? int.tryParse(_widthController.text) : null,
+        'height': _heightController.text.isNotEmpty ? int.tryParse(_heightController.text) : null,
         'color': _colorController.text.trim().isNotEmpty
             ? _colorController.text.trim()
+            : null,
+        'priceOverride': _priceOverrideController.text.trim().isNotEmpty
+            ? double.tryParse(_priceOverrideController.text.trim())
             : null,
         'notes': _notesController.text.trim().isNotEmpty
             ? _notesController.text.trim()
             : null,
         'temas': _selectedTemas.isNotEmpty ? _selectedTemas : [],
-        'images': [],
+        'images': _uploadedImages,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
