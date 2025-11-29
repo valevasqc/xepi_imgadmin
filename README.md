@@ -1,16 +1,70 @@
-# xepi_imgadmin
+# XEPI Admin System
 
-A new Flutter project.
+Web-based inventory and sales management system for XEPI, a Guatemalan retail company managing approximately 1,000 decorative products across a warehouse and a store.
 
-## Getting Started
+## Tech Stack
 
-This project is a starting point for a Flutter application.
+- Flutter Web
+- Firebase (Authentication, Firestore, Storage, Hosting)
+- Python 3.13+ (migration scripts)
 
-A few resources to get you started if this is your first Flutter project:
+## Features
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- Product catalog management with barcode scanning
+- Real-time inventory tracking (warehouse and store locations)
+- Order management (WhatsApp/Facebook orders)
+- Sales recording and cash flow tracking
+- Financial reports and analytics
+- User role management (superuser and employee access levels)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Setup
+
+1. Install Flutter dependencies:
+```bash
+flutter pub get
+```
+
+2. Configure Firebase:
+```bash
+cp lib/firebase_options.dart.example lib/firebase_options.dart
+cp web/firebase-config.js.example web/firebase-config.js
+```
+Edit both files with your Firebase project credentials.
+
+3. Run development server:
+```bash
+flutter run -d chrome
+```
+
+4. Build for production:
+```bash
+flutter build web
+```
+
+5. Deploy to Firebase Hosting:
+```bash
+firebase deploy --only hosting
+```
+
+## Python Scripts
+
+Migration and data import scripts are located in the `scripts/` directory. Install Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Project Structure
+
+- `lib/screens/` - Phase 1 functional screens
+- `lib/screens/future/` - Phase 2 placeholder screens
+- `lib/config/` - Theme and configuration
+- `scripts/` - Python migration scripts
+
+## Security
+
+Sensitive files are gitignored. Never commit:
+- `serviceAccountKey.json`
+- `.env`
+- `lib/firebase_options.dart`
+- `web/firebase-config.js`
