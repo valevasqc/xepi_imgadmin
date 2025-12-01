@@ -16,5 +16,13 @@ service firebase.storage {
                       (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
                        request.auth.uid == 'c7EG7sjnBTVAH2oIf2G3vpdUkIH2');
     }
+    
+    // Categories - nested structure for primary and subcategories
+    match /categories/{primaryCategory}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+                      (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
+                       request.auth.uid == 'c7EG7sjnBTVAH2oIf2G3vpdUkIH2');
+    }
   }
 }

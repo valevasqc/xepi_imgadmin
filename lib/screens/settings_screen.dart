@@ -186,10 +186,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 padding:
                                     const EdgeInsets.all(AppTheme.spacingM),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.blue.withOpacity(0.1),
+                                  color: AppTheme.blue.withValues(alpha: 0.1),
                                   borderRadius: AppTheme.borderRadiusSmall,
                                   border: Border.all(
-                                    color: AppTheme.blue.withOpacity(0.3),
+                                    color: AppTheme.blue.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: Row(
@@ -319,7 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Container(
                 padding: const EdgeInsets.all(AppTheme.spacingS),
                 decoration: BoxDecoration(
-                  color: AppTheme.blue.withOpacity(0.1),
+                  color: AppTheme.blue.withValues(alpha: 0.1),
                   borderRadius: AppTheme.borderRadiusSmall,
                 ),
                 child: Icon(

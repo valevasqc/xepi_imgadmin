@@ -133,7 +133,7 @@ class MovementHistoryScreen extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: AppTheme.orange.withOpacity(0.1),
+              color: AppTheme.orange.withValues(alpha: 0.1),
               borderRadius: AppTheme.borderRadiusSmall,
             ),
             child: const Icon(Icons.swap_horiz_rounded,
@@ -152,7 +152,7 @@ class MovementHistoryScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: AppTheme.spacingS, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppTheme.blue.withOpacity(0.1),
+                        color: AppTheme.blue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(

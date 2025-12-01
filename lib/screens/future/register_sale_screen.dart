@@ -268,7 +268,7 @@ class RegisterSaleScreen extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(AppTheme.spacingM),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.blue.withOpacity(0.1) : AppTheme.backgroundGray,
+          color: isSelected ? AppTheme.blue.withValues(alpha: 0.1) : AppTheme.backgroundGray,
           borderRadius: AppTheme.borderRadiusSmall,
           border: Border.all(color: isSelected ? AppTheme.blue : AppTheme.lightGray, width: 2),
         ),

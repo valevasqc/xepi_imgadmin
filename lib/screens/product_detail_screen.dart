@@ -219,11 +219,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     if (categoryCode == null || categoryCode.isEmpty) return;
 
     try {
-      final doc =
-          await _firestore.collection('categories').doc(categoryCode).get();
-      if (doc.exists) {
+      // Find the category in the already-loaded categories list
+      final category = _allCategories.firstWhere(
+        (cat) => cat['code'] == categoryCode,
+        orElse: () => {},
+      );
+
+      if (category.isNotEmpty) {
         setState(() {
-          _categoryData = doc.data();
+          _categoryData = category;
         });
       }
     } catch (e) {
@@ -235,13 +239,35 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     if (_categoriesLoaded) return;
 
     try {
-      final snapshot = await _firestore.collection('categories').get();
+      // Load primary categories
+      final primarySnapshot = await _firestore.collection('categories').get();
+
+      final List<Map<String, dynamic>> categories = [];
+
+      // For each primary category, load its subcategories
+      for (var primaryDoc in primarySnapshot.docs) {
+        final primaryData = primaryDoc.data();
+        final primaryName = primaryDoc.id;
+
+        // Load subcategories
+        final subSnapshot =
+            await primaryDoc.reference.collection('subcategories').get();
+
+        for (var subDoc in subSnapshot.docs) {
+          final subData = subDoc.data();
+          categories.add({
+            'id': subDoc.id, // Subcategory code (e.g., "LAT-2030")
+            'code': subData['code'] as String?,
+            'name': subData['name'] as String?,
+            'primaryCategory': primaryName,
+            'subcategoryName': subData['subcategoryName'] as String? ?? '',
+            'defaultPrice': subData['defaultPrice'],
+          });
+        }
+      }
+
       setState(() {
-        _allCategories = snapshot.docs.map((doc) {
-          final data = doc.data();
-          data['id'] = doc.id;
-          return data;
-        }).toList();
+        _allCategories = categories;
         _categoriesLoaded = true;
       });
       _updateAvailableSubcategories();
@@ -937,12 +963,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
             decoration: BoxDecoration(
               color: totalStock == 0
-                  ? AppTheme.danger.withOpacity(0.1)
+                  ? AppTheme.danger.withValues(alpha: 0.1)
                   : totalStock < 3
-                      ? AppTheme.warning.withOpacity(0.1)
+                      ? AppTheme.warning.withValues(alpha: 0.1)
                       : totalStock < 10
-                          ? Colors.orange.withOpacity(0.1)
-                          : AppTheme.success.withOpacity(0.1),
+                          ? Colors.orange.withValues(alpha: 0.1)
+                          : AppTheme.success.withValues(alpha: 0.1),
               borderRadius: AppTheme.borderRadiusSmall,
               border: Border.all(
                 color: totalStock == 0
@@ -1075,7 +1101,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           Container(
             padding: const EdgeInsets.all(AppTheme.spacingM),
             decoration: BoxDecoration(
-              color: AppTheme.blue.withOpacity(0.1),
+              color: AppTheme.blue.withValues(alpha: 0.1),
               borderRadius: AppTheme.borderRadiusSmall,
             ),
             child: Row(
@@ -1521,7 +1547,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                     },
                                     backgroundColor: AppTheme.white,
                                     selectedColor:
-                                        AppTheme.blue.withOpacity(0.1),
+                                        AppTheme.blue.withValues(alpha: 0.1),
                                     checkmarkColor: AppTheme.blue,
                                     labelStyle: AppTheme.bodySmall.copyWith(
                                       color: isSelected
@@ -1559,7 +1585,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               icon: const Icon(Icons.add_rounded, size: 20),
                               iconSize: 20,
                               style: IconButton.styleFrom(
-                                backgroundColor: AppTheme.blue.withOpacity(0.1),
+                                backgroundColor:
+                                    AppTheme.blue.withValues(alpha: 0.1),
                                 foregroundColor: AppTheme.blue,
                                 minimumSize: const Size(32, 32),
                                 padding: EdgeInsets.zero,
@@ -2299,7 +2326,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                   filled: true,
                   fillColor: currentAdjustment != 0
-                      ? AppTheme.blue.withOpacity(0.1)
+                      ? AppTheme.blue.withValues(alpha: 0.1)
                       : AppTheme.white,
                 ),
                 style: AppTheme.heading3.copyWith(

@@ -43,12 +43,6 @@ class _MainLayoutState extends State<MainLayout> {
       page: const CategoriesListScreen(),
       isPhase2: false,
     ),
-    NavigationItem(
-      icon: Icons.account_balance_wallet_rounded,
-      label: 'Finanzas',
-      page: const FinancesScreen(),
-      isPhase2: false,
-    ),
 
     // Divider
     NavigationItem(
@@ -60,6 +54,12 @@ class _MainLayoutState extends State<MainLayout> {
     ),
 
     // Phase 2 - UI only
+    NavigationItem(
+      icon: Icons.account_balance_wallet_rounded,
+      label: 'Finanzas',
+      page: const FinancesScreen(),
+      isPhase2: true,
+    ),
     NavigationItem(
       icon: Icons.receipt_long_rounded,
       label: 'Pedidos',
@@ -251,8 +251,8 @@ class _MainLayoutState extends State<MainLayout> {
                               decoration: BoxDecoration(
                                 color: isSelected
                                     ? (item.isPhase2
-                                        ? AppTheme.orange.withOpacity(0.1)
-                                        : AppTheme.blue.withOpacity(0.1))
+                                        ? AppTheme.orange.withValues(alpha: 0.1)
+                                        : AppTheme.blue.withValues(alpha: 0.1))
                                     : Colors.transparent,
                                 borderRadius: AppTheme.borderRadiusSmall,
                               ),
@@ -323,8 +323,8 @@ class _MainLayoutState extends State<MainLayout> {
                                       Container(
                                         padding: const EdgeInsets.all(4),
                                         decoration: BoxDecoration(
-                                          color:
-                                              AppTheme.orange.withOpacity(0.1),
+                                          color: AppTheme.orange
+                                              .withValues(alpha: 0.1),
                                           borderRadius:
                                               BorderRadius.circular(4),
                                         ),

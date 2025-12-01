@@ -143,7 +143,7 @@ class SalesHistoryScreen extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: AppTheme.success.withOpacity(0.1),
+              color: AppTheme.success.withValues(alpha: 0.1),
               borderRadius: AppTheme.borderRadiusSmall,
             ),
             child: const Icon(Icons.shopping_bag_rounded, color: AppTheme.success, size: 28),
@@ -160,7 +160,7 @@ class SalesHistoryScreen extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingS, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppTheme.success.withOpacity(0.1),
+                        color: AppTheme.success.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(

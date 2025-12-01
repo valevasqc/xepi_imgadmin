@@ -149,7 +149,7 @@ class _FinancesScreenState extends State<FinancesScreen> {
               margin: const EdgeInsets.only(bottom: AppTheme.spacingL),
               padding: const EdgeInsets.all(AppTheme.spacingM),
               decoration: BoxDecoration(
-                color: AppTheme.danger.withOpacity(0.1),
+                color: AppTheme.danger.withValues(alpha: 0.1),
                 borderRadius: AppTheme.borderRadiusSmall,
                 border: Border.all(color: AppTheme.danger),
               ),
@@ -249,9 +249,9 @@ class _FinancesScreenState extends State<FinancesScreen> {
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingL),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
+        color: color.withValues(alpha: 0.05),
         borderRadius: AppTheme.borderRadiusSmall,
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,7 +293,7 @@ class _FinancesScreenState extends State<FinancesScreen> {
         Container(
           padding: const EdgeInsets.all(AppTheme.spacingM),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: AppTheme.borderRadiusSmall,
           ),
           child: Icon(icon, color: color, size: 24),
@@ -401,7 +401,7 @@ class _FinancesScreenState extends State<FinancesScreen> {
             Container(
               padding: const EdgeInsets.all(AppTheme.spacingS),
               decoration: BoxDecoration(
-                color: AppTheme.success.withOpacity(0.1),
+                color: AppTheme.success.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.check_circle_rounded,
@@ -664,7 +664,7 @@ class _FinancesScreenState extends State<FinancesScreen> {
             Container(
               padding: const EdgeInsets.all(AppTheme.spacingS),
               decoration: BoxDecoration(
-                color: AppTheme.danger.withOpacity(0.1),
+                color: AppTheme.danger.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.trending_down_rounded,
@@ -683,7 +683,7 @@ class _FinancesScreenState extends State<FinancesScreen> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: AppTheme.blue.withOpacity(0.1),
+                          color: AppTheme.blue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -789,7 +789,7 @@ class _FinancesScreenState extends State<FinancesScreen> {
           Container(
             padding: const EdgeInsets.all(AppTheme.spacingL),
             decoration: BoxDecoration(
-              color: AppTheme.success.withOpacity(0.1),
+              color: AppTheme.success.withValues(alpha: 0.1),
               borderRadius: AppTheme.borderRadiusSmall,
             ),
             child: Column(
@@ -823,13 +823,13 @@ class _FinancesScreenState extends State<FinancesScreen> {
             padding: const EdgeInsets.all(AppTheme.spacingM),
             decoration: BoxDecoration(
               color: growth > 0
-                  ? AppTheme.success.withOpacity(0.05)
-                  : AppTheme.danger.withOpacity(0.05),
+                  ? AppTheme.success.withValues(alpha: 0.05)
+                  : AppTheme.danger.withValues(alpha: 0.05),
               borderRadius: AppTheme.borderRadiusSmall,
               border: Border.all(
                 color: growth > 0
-                    ? AppTheme.success.withOpacity(0.3)
-                    : AppTheme.danger.withOpacity(0.3),
+                    ? AppTheme.success.withValues(alpha: 0.3)
+                    : AppTheme.danger.withValues(alpha: 0.3),
               ),
             ),
             child: Row(

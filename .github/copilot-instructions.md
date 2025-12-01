@@ -4,14 +4,15 @@
 
 Flutter web admin application for XEPI, a Guatemalan retail company. Manages inventory, sales, orders, and finances for ~600 decorative products across 1 warehouse + 1 store.
 
-**Current State:** Basic navigation scaffold only. Phase 1 screens exist but not customized yet (generic placeholders). Phase 2 screens scaffolded for visualization only. NO backend functionality implemented. Only legacy image upload works (Realtime DB). Still using Realtime DB, migration to Firestore pending until requirements are finalized.
+**Current State:** Phase 1 admin CRUD complete and functional. Products (1,066) and Categories (24) migrated to Firestore. Full image management, category management with cover images, and product reordering implemented. Phase 2 screens are UI-only placeholders.
 
-**Current Phase:** Data Preparation - Creating Excel files for Firestore migration
+**Current Phase:** Phase 1 Complete - Admin system ready for client site development
 
-**Tech Stack:** Flutter (web), Firebase (Auth, Firestore planned, Storage, Hosting)  
+**Tech Stack:** Flutter (web), Firebase (Auth, Firestore, Storage, Hosting)  
 **Currency:** Guatemalan Quetzales (Q)  
 **Languages:** Spanish UI, English code  
 **Hardware:** Physical barcode scanners (USB), camera scanning later
+**Database:** ~1,066 products across 24 categories in Firestore
 
 ## Project Scope
 
@@ -83,27 +84,27 @@ Cuadros de latón | 30x40 cms | 59
 ```
 
 ### **Migration Plan**
-1. ⏳ Employee completes Excel files
-2. ⏳ Write Python import script (Excel → Firestore)
-3. ⏳ Create Firestore collections (`products`, `categories`)
-4. ⏳ Run migration (import all 600 products)
-5. ⏳ Link existing Storage images to products (by barcode)
-6. ⏳ Verify data integrity
-7. ✅ Begin Phase 1A development
+1. ✅ Employee completed Excel files
+2. ✅ Wrote Python import scripts (Excel → Firestore)
+3. ✅ Created Firestore collections (`products`, `categories`, `temas`)
+4. ✅ Ran migration (imported 1,066 products, 24 categories)
+5. ✅ Linked Storage images to products (by barcode)
+6. ✅ Verified data integrity
+7. ✅ Phase 1A development complete
 
 ## Architecture
 
 ### 3-Phase Implementation
 
-**Phase 1 (UI ONLY - Mock data):**
+**Phase 1 (Fully Functional - Firestore Backend):**
 - Dashboard (`dashboard_screen.dart`) - Overview, stats, alerts
-- Products (`products_list_screen.dart`, `product_detail_screen.dart`, `add_product_screen.dart`) - 3 view modes (cards/table/list)
-- Categories (`categories_list_screen.dart`, `category_detail_screen.dart`) - Category management
-- Finances (`finances_screen.dart`) - Cash tracking, deposits, expenses
+- Products (`products_list_screen.dart`, `product_detail_screen.dart`, `add_product_screen.dart`) - Full CRUD with image management
+- Categories (`categories_list_screen.dart`, `category_detail_screen.dart`) - Cover images, product reordering
 - Settings (`settings_screen.dart`) - User management, config
 
 **Phase 2 (UI ONLY - Mock data):**  
 Located in `lib/screens/future/`:
+- Finances (`finances_screen.dart`) - Cash tracking, deposits, expenses
 - Orders, Shipments, Movements, Register Sale, Reports
 - Show snackbar: "Phase 2: Solo UI disponible. Funcionalidad próximamente."
 - Visual indicator: 🔒 lock icon (see `main_layout.dart` for pattern)
@@ -123,9 +124,23 @@ Located in `lib/screens/future/`:
 
 **Current State:**
 - Authentication via `FirebaseAuth` (email/password)
-- Legacy uses `FirebaseDatabase.instance.ref('images')` - Still active, images in Storage
-- **Migration to Firestore NOT started yet** - waiting for complete requirements definition
-- Plan: Build products foundation first, then migrate
+- Firestore collections: `products`, `categories`, `temas`
+- Storage structure: `products/{barcode}/{filename}`, `categories/{categoryId}/cover.jpg`
+- Composite indexes deployed for queries
+
+**Products Collection:**
+- Document ID: barcode (13-digit string)
+- Fields: barcode, name, categoryCode, primaryCategory, subcategory, images[], priceOverride, stockWarehouse, stockStore, isActive, displayOrder, temas[], size, sizeFormatted, warehouseCode, createdAt, updatedAt
+- Query pattern: `.where('categoryCode', isEqualTo: code).orderBy('displayOrder')`
+
+**Categories Collection:**
+- Document ID: category code (e.g., "LAT-2030")
+- Fields: code, name, primaryCategory, primaryCode, subcategoryName, defaultPrice, coverImageUrl, bulkPricing, isActive, displayOrder, hasSubcategories
+- 24 categories grouped into 8 primary categories
+
+**Temas Collection:**
+- Separate collection for performance (50x faster than scanning all products)
+- Used for autocomplete/filtering by design themes
 
 **Barcode Scanning:**
 - Physical USB scanners (acts as keyboard: types barcode + Enter)
@@ -141,17 +156,11 @@ await Firebase.initializeApp(
 );
 ```
 
-**Firestore Collections Design** (for Phase 2 implementation):
-- `categories/` - Product categories with default pricing
-- `products/` - Individual products (barcode as doc ID)
-- `orders/` - Customer orders (WhatsApp/Facebook)
-- `sales/` - Completed transactions
-- `shipments/` - Inventory receipts
-- `movements/` - Warehouse ↔ Store transfers
-- `deposits/` - Cash deposits (superuser only)
-- `expenses/` - Business expenses (superuser only)
-- `users/` - Admin users with roles
-- `notifications/` - System alerts
+**Firestore Collections Design** (implemented):
+- `categories/` - Product categories with default pricing, cover images
+- `products/` - Individual products (barcode as doc ID) with images, stock, pricing
+- `temas/` - Design themes for filtering/autocomplete
+- Future: `orders/`, `sales/`, `shipments/`, `movements/`, `deposits/`, `expenses/`, `users/`, `notifications/`
 
 ## Design System
 
@@ -388,6 +397,8 @@ flutter format lib/
 ❌ Don't hardcode spacing - use `AppTheme.spacing*` values  
 ❌ Don't forget Spanish UI text  
 ❌ Don't mix Google Fonts - Montserrat (headings) + Quicksand (body)
+❌ Don't forget to ask about Firestore field names - always verify structure first
+❌ Don't make commits without asking first. Commit descriptions should be short and not AI style
 
 ## Common Snackbar Pattern
 

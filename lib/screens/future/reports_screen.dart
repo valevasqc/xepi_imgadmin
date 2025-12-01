@@ -278,10 +278,10 @@ class _ReportsScreenState extends State<ReportsScreen>
           height: 32,
           decoration: BoxDecoration(
             color: rank == 1
-                ? AppTheme.orange.withOpacity(0.1)
+                ? AppTheme.orange.withValues(alpha: 0.1)
                 : rank == 2
-                    ? AppTheme.mediumGray.withOpacity(0.1)
-                    : AppTheme.yellow.withOpacity(0.1),
+                    ? AppTheme.mediumGray.withValues(alpha: 0.1)
+                    : AppTheme.yellow.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -461,7 +461,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: AppTheme.success.withOpacity(0.1),
+              color: AppTheme.success.withValues(alpha: 0.1),
               borderRadius: AppTheme.borderRadiusSmall,
             ),
             child: const Icon(Icons.shopping_bag_rounded,
@@ -480,7 +480,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                       padding: const EdgeInsets.symmetric(
                           horizontal: AppTheme.spacingS, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppTheme.success.withOpacity(0.1),
+                        color: AppTheme.success.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(

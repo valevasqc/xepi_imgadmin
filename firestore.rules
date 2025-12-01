@@ -22,6 +22,12 @@ service cloud.firestore {
     match /categories/{categoryId} {
       allow read: if true; // Public read for client app
       allow write: if isAuthenticated();
+      
+      // Subcategories - Authenticated users can read/write
+      match /subcategories/{subId} {
+        allow read: if true; // Public read for client app
+        allow write: if isAuthenticated();
+      }
     }
     
     // Temas - Authenticated users can read/write

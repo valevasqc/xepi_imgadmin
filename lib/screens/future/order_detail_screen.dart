@@ -183,7 +183,7 @@ class OrderDetailScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(AppTheme.spacingL),
             decoration: BoxDecoration(
-              color: AppTheme.danger.withOpacity(0.1),
+              color: AppTheme.danger.withValues(alpha: 0.1),
               borderRadius: AppTheme.borderRadiusMedium,
             ),
             child: Column(

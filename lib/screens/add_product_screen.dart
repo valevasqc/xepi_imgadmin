@@ -41,8 +41,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   List<Map<String, dynamic>> _categories = [];
   List<String> _availableSubcategories = [];
   List<String> _allTemas = [];
-  List<String> _selectedTemas = [];
-  List<String> _uploadedImages = [];
+  final List<String> _selectedTemas = [];
+  final List<String> _uploadedImages = [];
   int _selectedImageIndex = 0;
 
   @override
@@ -245,7 +245,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                             child: CircularProgressIndicator(),
                                           )
                                         : DropdownButtonFormField<String>(
-                                            value: _selectedCategoryId,
+                                            initialValue: _selectedCategoryId,
                                             decoration: const InputDecoration(
                                               labelText: 'Categoría',
                                             ),
@@ -270,7 +270,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               if (_availableSubcategories.isNotEmpty) ...[
                                 const SizedBox(height: AppTheme.spacingM),
                                 DropdownButtonFormField<String>(
-                                  value: _selectedSubcategory,
+                                  initialValue: _selectedSubcategory,
                                   decoration: const InputDecoration(
                                     labelText: 'Subcategoría',
                                   ),
@@ -957,6 +957,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             : null,
         'temas': _selectedTemas.isNotEmpty ? _selectedTemas : [],
         'images': _uploadedImages,
+        'isActive': true,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };

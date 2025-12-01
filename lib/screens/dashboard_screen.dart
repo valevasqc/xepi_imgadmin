@@ -99,9 +99,9 @@ class DashboardScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(AppTheme.spacingM),
             decoration: BoxDecoration(
-              color: AppTheme.danger.withOpacity(0.1),
+              color: AppTheme.danger.withValues(alpha: 0.1),
               borderRadius: AppTheme.borderRadiusSmall,
-              border: Border.all(color: AppTheme.danger.withOpacity(0.3)),
+              border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,9 +255,9 @@ class DashboardScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingM),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
+        color: color.withValues(alpha: 0.05),
         borderRadius: AppTheme.borderRadiusSmall,
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -364,7 +364,7 @@ class DashboardScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: AppTheme.spacingS, vertical: 2),
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
+                        color: statusColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(status,

@@ -22,6 +22,7 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
   String? _selectedLocation;
   String? _selectedStockStatus;
   bool _showFilters = false; // Collapsible filters
+  String _sortOption = 'Nombre (A-Z)'; // Default sort
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ScrollController _scrollController = ScrollController();
@@ -36,7 +37,6 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
   // Pagination
   static const int _pageSize = 50; // Products per page
   int _currentPage = 1;
-  int _totalProducts = 0;
   List<Map<String, dynamic>> _allLoadedProducts =
       []; // Cache all loaded products
 
@@ -241,12 +241,53 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
                           vertical: AppTheme.spacingS + 2,
                         ),
                         backgroundColor: _showFilters
-                            ? AppTheme.blue.withOpacity(0.1)
+                            ? AppTheme.blue.withValues(alpha: 0.1)
                             : null,
                         side: BorderSide(
                           color:
                               _showFilters ? AppTheme.blue : AppTheme.lightGray,
                         ),
+                      ),
+                    ),
+
+                    const SizedBox(width: AppTheme.spacingM),
+
+                    // Sort Dropdown
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppTheme.spacingM,
+                        vertical: AppTheme.spacingS,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.lightGray),
+                        borderRadius: AppTheme.borderRadiusSmall,
+                      ),
+                      child: DropdownButton<String>(
+                        value: _sortOption,
+                        underline: const SizedBox(),
+                        isDense: true,
+                        icon: const Icon(Icons.sort_rounded, size: 18),
+                        items: [
+                          'Nombre (A-Z)',
+                          'Nombre (Z-A)',
+                          'Precio (menor)',
+                          'Precio (mayor)',
+                          'Stock (menor)',
+                          'Stock (mayor)',
+                        ].map((option) {
+                          return DropdownMenuItem(
+                            value: option,
+                            child: Text(
+                              option,
+                              style: AppTheme.bodySmall,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _sortOption = value!;
+                          });
+                        },
                       ),
                     ),
 
@@ -876,7 +917,8 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: stockStatus['color'].withOpacity(0.1),
+                                color:
+                                    stockStatus['color'].withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -895,7 +937,7 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.danger.withOpacity(0.1),
+                                color: AppTheme.danger.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Text(
@@ -1051,7 +1093,7 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: stockStatus['color'].withOpacity(0.1),
+                      color: stockStatus['color'].withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -1228,7 +1270,7 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: stockStatus['color'].withOpacity(0.1),
+                            color: stockStatus['color'].withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -1303,22 +1345,91 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
                   ...doc.data(),
                 })
             .toList();
-        _totalProducts = _allLoadedProducts.length;
       });
     } catch (e) {
       debugPrint('Error loading products: $e');
     }
   }
 
+  List<Map<String, dynamic>> _sortProducts(
+      List<Map<String, dynamic>> products) {
+    final sorted = List<Map<String, dynamic>>.from(products);
+
+    switch (_sortOption) {
+      case 'Nombre (A-Z)':
+        sorted.sort((a, b) {
+          final nameA = (a['nombre'] ?? a['warehouseCode'] ?? '')
+              .toString()
+              .toLowerCase();
+          final nameB = (b['nombre'] ?? b['warehouseCode'] ?? '')
+              .toString()
+              .toLowerCase();
+          return nameA.compareTo(nameB);
+        });
+        break;
+
+      case 'Nombre (Z-A)':
+        sorted.sort((a, b) {
+          final nameA = (a['nombre'] ?? a['warehouseCode'] ?? '')
+              .toString()
+              .toLowerCase();
+          final nameB = (b['nombre'] ?? b['warehouseCode'] ?? '')
+              .toString()
+              .toLowerCase();
+          return nameB.compareTo(nameA);
+        });
+        break;
+
+      case 'Precio (menor)':
+        sorted.sort((a, b) {
+          final priceA = _getProductPrice(a) ?? double.infinity;
+          final priceB = _getProductPrice(b) ?? double.infinity;
+          return priceA.compareTo(priceB);
+        });
+        break;
+
+      case 'Precio (mayor)':
+        sorted.sort((a, b) {
+          final priceA = _getProductPrice(a) ?? 0.0;
+          final priceB = _getProductPrice(b) ?? 0.0;
+          return priceB.compareTo(priceA);
+        });
+        break;
+
+      case 'Stock (menor)':
+        sorted.sort((a, b) {
+          final stockA = ((a['stockWarehouse'] ?? 0) as int) +
+              ((a['stockStore'] ?? 0) as int);
+          final stockB = ((b['stockWarehouse'] ?? 0) as int) +
+              ((b['stockStore'] ?? 0) as int);
+          return stockA.compareTo(stockB);
+        });
+        break;
+
+      case 'Stock (mayor)':
+        sorted.sort((a, b) {
+          final stockA = ((a['stockWarehouse'] ?? 0) as int) +
+              ((a['stockStore'] ?? 0) as int);
+          final stockB = ((b['stockWarehouse'] ?? 0) as int) +
+              ((b['stockStore'] ?? 0) as int);
+          return stockB.compareTo(stockA);
+        });
+        break;
+    }
+
+    return sorted;
+  }
+
   List<Map<String, dynamic>> _getCurrentPageProducts() {
     final filtered = _filterProducts(_allLoadedProducts);
+    final sorted = _sortProducts(filtered);
     final startIndex = (_currentPage - 1) * _pageSize;
     final endIndex = startIndex + _pageSize;
 
-    if (startIndex >= filtered.length) return [];
-    return filtered.sublist(
+    if (startIndex >= sorted.length) return [];
+    return sorted.sublist(
       startIndex,
-      endIndex > filtered.length ? filtered.length : endIndex,
+      endIndex > sorted.length ? sorted.length : endIndex,
     );
   }
 

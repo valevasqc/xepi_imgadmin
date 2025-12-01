@@ -126,7 +126,7 @@ class ShipmentHistoryScreen extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: AppTheme.blue.withOpacity(0.1),
+              color: AppTheme.blue.withValues(alpha: 0.1),
               borderRadius: AppTheme.borderRadiusSmall,
             ),
             child: const Icon(Icons.inventory_2_rounded,
@@ -145,7 +145,7 @@ class ShipmentHistoryScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: AppTheme.spacingS, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppTheme.success.withOpacity(0.1),
+                        color: AppTheme.success.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
