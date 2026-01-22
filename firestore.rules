@@ -46,9 +46,20 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
     
+    // Pending Cash - Authenticated only
+    match /pendingCash/{source} {
+      allow read, write: if isAuthenticated();
+    }
+    
     // Shipments - Authenticated only
     match /shipments/{shipmentId} {
       allow read, write: if isAuthenticated();
+    }
+    
+    // Locations - Authenticated read, superuser write
+    match /locations/{locationId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperuser();
     }
     
     // Movements - Authenticated only
@@ -56,14 +67,29 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
     
-    // Deposits - Superuser only
+    // Deposits - Authenticated users can create/read, superuser can do all
     match /deposits/{depositId} {
-      allow read, write: if isSuperuser();
+      allow read, create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && 
+        (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
+         request.auth.uid == 'yMnQBCQrtpblH3yTHd05XLVloZu2');
     }
     
-    // Expenses - Superuser only
+    // Expenses - Authenticated users can create, all can read, superuser can update/delete
     match /expenses/{expenseId} {
-      allow read, write: if isSuperuser();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && 
+        (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
+         request.auth.uid == 'yMnQBCQrtpblH3yTHd05XLVloZu2');
+    }
+    
+    // Expense Categories - Authenticated read, superuser write
+    match /expense_categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+        (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
+         request.auth.uid == 'yMnQBCQrtpblH3yTHd05XLVloZu2');
     }
     
     // Users - Admin management

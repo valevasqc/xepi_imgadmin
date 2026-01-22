@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
@@ -21,7 +20,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       FirebaseDatabase.instance.ref('images');
   final firebase_storage.FirebaseStorage _storage =
       firebase_storage.FirebaseStorage.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   List<String> _categories = [];
   String? _selectedCategory;
   XFile? _selectedCoverImage;
@@ -30,8 +29,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   bool _isUploadingProduct = false;
   List<MapEntry<String, String>> _orderedImages = [];
   String? _coverImageUrl;
-  final Map<String, String> _imageBarcodes = {}; // Maps imageUrl to barcode
-  final Map<String, TextEditingController> _barcodeControllers = {};
+  // final Map<String, String> _imageBarcodes = {}; // Maps imageUrl to barcode
+  // final Map<String, TextEditingController> _barcodeControllers = {};
 
   @override
   void initState() {
@@ -41,130 +40,130 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   void dispose() {
-    _barcodeControllers.forEach((key, controller) => controller.dispose());
+    // _barcodeControllers.forEach((key, controller) => controller.dispose());
     super.dispose();
   }
 
-  Future<void> _loadBarcodesForCategory(String category) async {
-    // Load existing barcodes from Firestore where images array contains URLs from this category
-    _imageBarcodes.clear();
-    _barcodeControllers.forEach((key, controller) => controller.dispose());
-    _barcodeControllers.clear();
+  // Future<void> _loadBarcodesForCategory(String category) async {
+  //   // Load existing barcodes from Firestore where images array contains URLs from this category
+  //   _imageBarcodes.clear();
+  //   _barcodeControllers.forEach((key, controller) => controller.dispose());
+  //   _barcodeControllers.clear();
 
-    try {
-      final querySnapshot = await _firestore.collection('products').get();
+  //   try {
+  //     final querySnapshot = await _firestore.collection('products').get();
 
-      for (var doc in querySnapshot.docs) {
-        final data = doc.data();
-        final primaryImageUrl = data['primaryImageUrl'] as String?;
-        final barcode = data['barcode'] as String?;
+  //     for (var doc in querySnapshot.docs) {
+  //       final data = doc.data();
+  //       final primaryImageUrl = data['primaryImageUrl'] as String?;
+  //       final barcode = data['barcode'] as String?;
 
-        if (primaryImageUrl != null && barcode != null) {
-          // Map this image URL to its barcode for display
-          _imageBarcodes[primaryImageUrl] = barcode;
-        }
-      }
+  //       if (primaryImageUrl != null && barcode != null) {
+  //         // Map this image URL to its barcode for display
+  //         _imageBarcodes[primaryImageUrl] = barcode;
+  //       }
+  //     }
 
-      setState(() {});
-    } catch (e) {
-      debugPrint('Error loading barcodes from Firestore: $e');
-      // Continue even if error - controllers will be created in build
-    }
-  }
+  //     setState(() {});
+  //   } catch (e) {
+  //     debugPrint('Error loading barcodes from Firestore: $e');
+  //     // Continue even if error - controllers will be created in build
+  //   }
+  // }
 
-  TextEditingController _getOrCreateController(
-      String imageKey, String imageUrl) {
-    if (!_barcodeControllers.containsKey(imageKey)) {
-      _barcodeControllers[imageKey] = TextEditingController(
-        text: _imageBarcodes[imageUrl] ?? '',
-      );
-    }
-    return _barcodeControllers[imageKey]!;
-  }
+  // TextEditingController _getOrCreateController(
+  //     String imageKey, String imageUrl) {
+  //   if (!_barcodeControllers.containsKey(imageKey)) {
+  //     _barcodeControllers[imageKey] = TextEditingController(
+  //       text: _imageBarcodes[imageUrl] ?? '',
+  //     );
+  //   }
+  //   return _barcodeControllers[imageKey]!;
+  // }
 
-  bool _allImagesHaveBarcodes() {
-    if (_orderedImages.isEmpty) return true;
-    for (var entry in _orderedImages) {
-      if (!_imageBarcodes.containsKey(entry.value)) {
-        return false;
-      }
-    }
-    return true;
-  }
+  // bool _allImagesHaveBarcodes() {
+  //   if (_orderedImages.isEmpty) return true;
+  //   for (var entry in _orderedImages) {
+  //     if (!_imageBarcodes.containsKey(entry.value)) {
+  //       return false;
+  //     }
+  //   }
+  //   return true;
+  // }
 
-  Future<void> _saveBarcode(String imageKey, String imageUrl) async {
-    debugPrint('=== SAVE BARCODE TO FIRESTORE ===');
-    debugPrint('imageKey: $imageKey');
-    debugPrint('imageUrl: $imageUrl');
+  // Future<void> _saveBarcode(String imageKey, String imageUrl) async {
+  //   debugPrint('=== SAVE BARCODE TO FIRESTORE ===');
+  //   debugPrint('imageKey: $imageKey');
+  //   debugPrint('imageUrl: $imageUrl');
 
-    final controller = _barcodeControllers[imageKey];
+  //   final controller = _barcodeControllers[imageKey];
 
-    if (controller == null) {
-      debugPrint('ERROR: Controller is null!');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Error: No se pudo encontrar el campo de texto')),
-        );
-      }
-      return;
-    }
+  //   if (controller == null) {
+  //     debugPrint('ERROR: Controller is null!');
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(
+  //             content: Text('Error: No se pudo encontrar el campo de texto')),
+  //       );
+  //     }
+  //     return;
+  //   }
 
-    final barcode = controller.text.trim();
-    debugPrint('barcode value: "$barcode"');
+  //   final barcode = controller.text.trim();
+  //   debugPrint('barcode value: "$barcode"');
 
-    if (barcode.isEmpty) {
-      debugPrint('ERROR: Barcode is empty!');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('El código de barras no puede estar vacío')),
-        );
-      }
-      return;
-    }
+  //   if (barcode.isEmpty) {
+  //     debugPrint('ERROR: Barcode is empty!');
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(
+  //             content: Text('El código de barras no puede estar vacío')),
+  //       );
+  //     }
+  //     return;
+  //   }
 
-    debugPrint('Attempting to save to Firestore...');
-    try {
-      // Create/update product document in Firestore - minimal schema
-      // Only barcode and primaryImageUrl. Everything else filled by Python later.
-      await _firestore.collection('products').doc(barcode).set({
-        'barcode': barcode,
-        'primaryImageUrl': imageUrl,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+  //   debugPrint('Attempting to save to Firestore...');
+  //   try {
+  //     // Create/update product document in Firestore - minimal schema
+  //     // Only barcode and primaryImageUrl. Everything else filled by Python later.
+  //     await _firestore.collection('products').doc(barcode).set({
+  //       'barcode': barcode,
+  //       'primaryImageUrl': imageUrl,
+  //       'createdAt': FieldValue.serverTimestamp(),
+  //       'updatedAt': FieldValue.serverTimestamp(),
+  //     });
 
-      debugPrint('Firestore save successful!');
+  //     debugPrint('Firestore save successful!');
 
-      setState(() {
-        _imageBarcodes[imageUrl] = barcode;
-      });
+  //     setState(() {
+  //       _imageBarcodes[imageUrl] = barcode;
+  //     });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('✓ Código de barras "$barcode" guardado en Firestore!'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content:
+  //               Text('✓ Código de barras "$barcode" guardado en Firestore!'),
+  //           backgroundColor: Colors.green,
+  //           duration: const Duration(seconds: 2),
+  //         ),
+  //       );
+  //     }
 
-      debugPrint('Success message shown');
-    } catch (e) {
-      debugPrint('ERROR saving to Firestore: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error guardando código: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
+  //     debugPrint('Success message shown');
+  //   } catch (e) {
+  //     debugPrint('ERROR saving to Firestore: $e');
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text('Error guardando código: $e'),
+  //           backgroundColor: Colors.red,
+  //         ),
+  //       );
+  //     }
+  //   }
+  // }
 
   Future<void> _deleteCategory(String category) async {
     final confirm = await showDialog<bool>(
@@ -313,34 +312,58 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Future<void> _fetchImagesForCategory(String category) async {
+    debugPrint('=== Fetching images for category: $category ===');
     final snapshot = await _databaseRef.child(category).get();
     if (snapshot.exists) {
       final data = snapshot.value;
+      debugPrint('Raw data type: ${data.runtimeType}');
       if (data is Map<dynamic, dynamic>) {
         final List<MapEntry<String, String>> fetchedImages = [];
         String? fetchedCoverImageUrl;
 
         data.forEach((key, value) {
+          debugPrint('Processing key: $key, value type: ${value.runtimeType}');
           if (key == 'coverImage') {
             fetchedCoverImageUrl = value.toString();
           } else if (key == 'products') {
             if (value is Map<dynamic, dynamic>) {
               value.forEach((productKey, productValue) {
-                if (productKey != '__placeholder__' && productKey != '_empty') {
+                debugPrint('  Product key: $productKey, value: ${productValue?.toString().substring(0, 50)}...');
+                // Filter out invalid entries
+                if (productKey != '__placeholder__' && 
+                    productKey != '_empty' &&
+                    productValue != null &&
+                    productValue.toString().trim().isNotEmpty &&
+                    productValue.toString().startsWith('http')) {
                   fetchedImages.add(
                       MapEntry(productKey.toString(), productValue.toString()));
+                } else {
+                  debugPrint('  ⚠️ FILTERED OUT: $productKey = ${productValue}');
                 }
               });
             } else if (value is List) {
+              debugPrint('List has ${value.length} items');
               for (int i = 0; i < value.length; i++) {
-                if (value[i] != null) {
+                debugPrint('  [$i] = ${value[i]}');
+                if (value[i] != null &&
+                    value[i].toString().trim().isNotEmpty &&
+                    value[i].toString().startsWith('http')) {
                   fetchedImages
                       .add(MapEntry(i.toString(), value[i].toString()));
+                } else {
+                  debugPrint('  ⚠️ FILTERED OUT LIST[$i] = ${value[i]}');
                 }
               }
             }
-          } else if (key != 'coverImage') {
+          } else if (key != 'coverImage' && 
+                     key != '__placeholder__' && 
+                     key != '_empty' &&
+                     value != null &&
+                     value.toString().trim().isNotEmpty &&
+                     value.toString().startsWith('http')) {
             fetchedImages.add(MapEntry(key.toString(), value.toString()));
+          } else {
+            debugPrint('  ⚠️ FILTERED OUT TOP-LEVEL: $key = ${value}');
           }
         });
 
@@ -350,13 +373,52 @@ class _AdminDashboardState extends State<AdminDashboard> {
           return aNum.compareTo(bNum);
         });
 
+        debugPrint('Total fetched images: ${fetchedImages.length}');
+        
+        // CLEANUP: If we filtered out any entries, rewrite the database to fix indexing
+        final productsData = data['products'];
+        if (productsData is List) {
+          // Firebase returned a List - check if original length doesn't match filtered length
+          final originalLength = (productsData as List).length;
+          debugPrint('Original list length: $originalLength, Filtered: ${fetchedImages.length}');
+          
+          if (originalLength != fetchedImages.length) {
+            debugPrint('⚠️ Found ${originalLength - fetchedImages.length} invalid entries, cleaning up database...');
+            // Rewrite as a clean Map with sequential keys (0, 1, 2, 3...)
+            final Map<String, dynamic> cleanedProducts = {};
+            for (int i = 0; i < fetchedImages.length; i++) {
+              cleanedProducts[i.toString()] = fetchedImages[i].value;
+            }
+            await _databaseRef.child(category).child('products').set(cleanedProducts);
+            debugPrint('✅ Database cleaned and reindexed with ${fetchedImages.length} valid entries');
+          }
+        } else if (productsData is Map) {
+          // Check if there are invalid entries in the map
+          final invalidKeys = <String>[];
+          (productsData as Map).forEach((key, value) {
+            if (key == '__placeholder__' || key == '_empty' || 
+                value == null || 
+                !value.toString().trim().startsWith('http')) {
+              invalidKeys.add(key.toString());
+            }
+          });
+          
+          if (invalidKeys.isNotEmpty) {
+            debugPrint('⚠️ Found ${invalidKeys.length} invalid entries in map, cleaning up...');
+            for (final key in invalidKeys) {
+              await _databaseRef.child(category).child('products').child(key).remove();
+            }
+            debugPrint('✅ Removed invalid entries: $invalidKeys');
+          }
+        }
+        
         setState(() {
           _orderedImages = fetchedImages;
           _coverImageUrl = fetchedCoverImageUrl;
         });
 
         // Load barcodes for this category
-        await _loadBarcodesForCategory(category);
+        // await _loadBarcodesForCategory(category);
       } else {
         setState(() {
           _orderedImages = [];
@@ -483,7 +545,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
               .where((key) => key != '__placeholder__' && key != '_empty')
               .length;
         } else if (data is List) {
-          startIndex = data.length;
+          // Count only valid entries, not nulls
+          startIndex = (data as List).where((item) => 
+            item != null && 
+            item.toString().trim().isNotEmpty &&
+            item.toString().startsWith('http')
+          ).length;
         }
       }
 
@@ -576,12 +643,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     if (confirm == true) {
       try {
-        if (imageKey != '__placeholder__') {
-          final firebase_storage.Reference ref = _storage.refFromURL(imageUrl);
-          await ref.delete();
-        }
-
         if (isCoverImage) {
+          if (imageKey != '__placeholder__') {
+            final firebase_storage.Reference ref = _storage.refFromURL(imageUrl);
+            await ref.delete();
+          }
+          
           await _databaseRef
               .child(_selectedCategory!)
               .child('coverImage')
@@ -590,24 +657,68 @@ class _AdminDashboardState extends State<AdminDashboard> {
             _coverImageUrl = null;
           });
         } else {
+          // Delete from storage (ignore 404 if already deleted)
+          if (imageKey != '__placeholder__') {
+            try {
+              final firebase_storage.Reference ref = _storage.refFromURL(imageUrl);
+              await ref.delete();
+            } catch (e) {
+              debugPrint('Storage file already deleted or not found: $e');
+            }
+          }
+
+          // Also delete from Firestore if it has a barcode
+          // final barcode = _imageBarcodes[imageUrl];
+          // if (barcode != null) {
+          //   await _firestore.collection('products').doc(barcode).delete();
+          // }
+
+          // Remove from local list
+          setState(() {
+            _orderedImages.removeWhere((entry) => entry.key == imageKey);
+            // _barcodeControllers[imageKey]?.dispose();
+            // _barcodeControllers.remove(imageKey);
+            // _imageBarcodes.remove(imageUrl);
+          });
+
+          // Reindex all remaining images to maintain sequential order (0, 1, 2, 3...)
+          final updates = <String, dynamic>{};
+          for (int i = 0; i < _orderedImages.length; i++) {
+            updates['$i'] = _orderedImages[i].value;
+          }
+
+          // Update Firebase with reindexed products
           await _databaseRef
               .child(_selectedCategory!)
               .child('products')
-              .child(imageKey)
-              .remove();
+              .set(updates);
 
-          // Also delete from Firestore if it has a barcode
-          final barcode = _imageBarcodes[imageUrl];
-          if (barcode != null) {
-            await _firestore.collection('products').doc(barcode).delete();
+          // Cleanup any empty/null objects that might remain
+          final verifySnapshot = await _databaseRef
+              .child(_selectedCategory!)
+              .child('products')
+              .get();
+          if (verifySnapshot.exists) {
+            final data = verifySnapshot.value;
+            if (data is Map<dynamic, dynamic>) {
+              // Remove any null, empty, or placeholder entries
+              for (var key in data.keys) {
+                if (data[key] == null || 
+                    key == '__placeholder__' || 
+                    key == '_empty' ||
+                    data[key].toString().isEmpty) {
+                  await _databaseRef
+                      .child(_selectedCategory!)
+                      .child('products')
+                      .child(key.toString())
+                      .remove();
+                }
+              }
+            }
           }
 
-          setState(() {
-            _orderedImages.removeWhere((entry) => entry.key == imageKey);
-            _barcodeControllers[imageKey]?.dispose();
-            _barcodeControllers.remove(imageKey);
-            _imageBarcodes.remove(imageUrl);
-          });
+          // Refresh to update keys
+          await _fetchImagesForCategory(_selectedCategory!);
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -618,6 +729,39 @@ class _AdminDashboardState extends State<AdminDashboard> {
           SnackBar(content: Text('Error eliminando imagen: $e')),
         );
       }
+    }
+  }
+
+  Future<void> _moveImage(int fromIndex, int toIndex) async {
+    if (_selectedCategory == null) return;
+
+    setState(() {
+      final item = _orderedImages.removeAt(fromIndex);
+      _orderedImages.insert(toIndex, item);
+    });
+
+    // Update Firebase with new order
+    final updates = <String, dynamic>{};
+    for (int i = 0; i < _orderedImages.length; i++) {
+      updates['$i'] = _orderedImages[i].value;
+    }
+
+    try {
+      await _databaseRef
+          .child(_selectedCategory!)
+          .child('products')
+          .set(updates);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al reordenar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      // Revert on error
+      await _fetchImagesForCategory(_selectedCategory!);
     }
   }
 
@@ -1363,35 +1507,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 ],
                               ),
                               const SizedBox(height: 15),
-                              // Conditional warning banner
-                              if (_orderedImages.isNotEmpty &&
-                                  !_allImagesHaveBarcodes())
-                                Container(
-                                  margin: const EdgeInsets.only(bottom: 15),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                        color: Colors.orange.shade200),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.warning_amber_rounded,
-                                          color: Colors.orange.shade700),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          'Algunas imágenes no tienen códigos de barras asignados. Asigna códigos para vincular con los datos del Excel.',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.orange.shade900,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
                               if (_orderedImages.isEmpty)
                                 Container(
                                   padding: const EdgeInsets.all(40),
@@ -1410,150 +1525,60 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                     ),
                                   ),
                                 )
-                              else
-                                // ReorderableGrid with barcode inputs
-                                ReorderableGridView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 3,
-                                    crossAxisSpacing: 16,
-                                    mainAxisSpacing: 16,
-                                    childAspectRatio: 0.7,
-                                  ),
-                                  itemCount: _orderedImages.length,
-                                  onReorder: (oldIndex, newIndex) async {
-                                    if (_selectedCategory == null) return;
-
-                                    setState(() {
-                                      final item =
-                                          _orderedImages.removeAt(oldIndex);
-                                      _orderedImages.insert(newIndex, item);
-                                    });
-
-                                    // Update Firebase with new order
-                                    final updates = <String, dynamic>{};
-                                    for (int i = 0;
-                                        i < _orderedImages.length;
-                                        i++) {
-                                      updates['$i'] = _orderedImages[i].value;
-                                    }
-
-                                    try {
-                                      await _databaseRef
-                                          .child(_selectedCategory!)
-                                          .child('products')
-                                          .set(updates);
-                                    } catch (e) {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content:
-                                                Text('Error al reordenar: $e'),
-                                            backgroundColor: Colors.red,
-                                          ),
-                                        );
-                                      }
-                                      // Revert on error
-                                      await _fetchImagesForCategory(
-                                          _selectedCategory!);
-                                    }
-                                  },
-                                  itemBuilder: (context, index) {
+                              else if (_orderedImages.length > 30)
+                                // For large categories, use separate scrollable grid
+                                SizedBox(
+                                  height: 600,
+                                  child: GridView.builder(
+                                    padding: const EdgeInsets.all(16),
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 3,
+                                      crossAxisSpacing: 16,
+                                      mainAxisSpacing: 16,
+                                      childAspectRatio: 1.0,
+                                    ),
+                                    itemCount: _orderedImages.length,
+                                    itemBuilder: (context, index) {
                                     final entry = _orderedImages[index];
-                                    // Get or create controller on-demand
-                                    final controller = _getOrCreateController(
-                                        entry.key, entry.value);
-                                    final hasBarcode =
-                                        _imageBarcodes.containsKey(entry.value);
+                                    
+                                    // Safety check: skip if URL is invalid
+                                    if (entry.value.isEmpty || !entry.value.startsWith('http')) {
+                                      debugPrint('⚠️ Skipping invalid entry in itemBuilder: ${entry.key} = ${entry.value}');
+                                      return const SizedBox.shrink();
+                                    }
 
                                     return Card(
-                                      key: ValueKey(entry.key),
+                                      key: ValueKey(entry.value), // Use URL as stable key
                                       elevation: 3,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
+                                      child: Stack(
+                                        fit: StackFit.expand,
                                         children: [
-                                          // Image preview
-                                          Expanded(
-                                            flex: 3,
-                                            child: Stack(
-                                              children: [
-                                                ClipRRect(
-                                                  borderRadius:
-                                                      const BorderRadius
-                                                          .vertical(
-                                                          top: Radius.circular(
-                                                              4)),
-                                                  child: Image.network(
-                                                    entry.value,
-                                                    fit: BoxFit.cover,
-                                                    width: double.infinity,
-                                                    height: double.infinity,
-                                                    errorBuilder: (context,
-                                                            error,
-                                                            stackTrace) =>
-                                                        Container(
-                                                      color:
-                                                          Colors.grey.shade300,
-                                                      child: const Icon(
-                                                          Icons.error,
-                                                          color: Colors.red),
-                                                    ),
-                                                  ),
+                                              ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              child: Image.network(
+                                                entry.value,
+                                                fit: BoxFit.cover,
+                                                width: double.infinity,
+                                                height: double.infinity,
+                                                cacheWidth: 400,
+                                                errorBuilder: (context,
+                                                        error,
+                                                        stackTrace) =>
+                                                    Container(
+                                                  color:
+                                                      Colors.grey.shade300,
+                                                  child: const Icon(
+                                                      Icons.error,
+                                                      color: Colors.red),
                                                 ),
-                                                // Status indicator
-                                                Positioned(
-                                                  top: 8,
-                                                  right: 8,
-                                                  child: Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 4),
-                                                    decoration: BoxDecoration(
-                                                      color: hasBarcode
-                                                          ? Colors.green
-                                                          : Colors.orange,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              12),
-                                                    ),
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        Icon(
-                                                          hasBarcode
-                                                              ? Icons
-                                                                  .check_circle
-                                                              : Icons.pending,
-                                                          size: 14,
-                                                          color: Colors.white,
-                                                        ),
-                                                        const SizedBox(
-                                                            width: 4),
-                                                        Text(
-                                                          hasBarcode
-                                                              ? 'Código asignado'
-                                                              : 'Sin código',
-                                                          style:
-                                                              const TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 10,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                                // Delete button
-                                                Positioned(
-                                                  top: 8,
+                                              ),
+                                            ),
+                                            // Status indicator - REMOVED (was using hasBarcode)
+                                            // Delete button
+                                            Positioned(
+                                              top: 8,
                                                   left: 8,
                                                   child: Container(
                                                     decoration: BoxDecoration(
@@ -1579,202 +1604,184 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                                     ),
                                                   ),
                                                 ),
-                                                // Drag indicator
-                                                Positioned(
-                                                  bottom: 8,
-                                                  left: 8,
-                                                  child: Container(
-                                                    decoration: BoxDecoration(
-                                                      color: Colors
-                                                          .blue.shade700
-                                                          .withOpacity(0.9),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              20),
-                                                      boxShadow: [
-                                                        BoxShadow(
-                                                          color: Colors.black
-                                                              .withOpacity(0.3),
-                                                          blurRadius: 4,
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    padding:
-                                                        const EdgeInsets.all(8),
-                                                    child: const Icon(
-                                                      Icons.drag_indicator,
-                                                      color: Colors.white,
-                                                      size: 18,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          // Barcode input section
-                                          Expanded(
-                                            flex: 2,
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.all(8.0),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.stretch,
-                                                children: [
-                                                  const Text(
-                                                    'Código de Barras:',
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: Colors.black87,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  // Show barcode or input field based on status
-                                                  if (hasBarcode &&
-                                                      controller
-                                                          .text.isNotEmpty)
-                                                    // Display mode: Show barcode with edit button
-                                                    Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                          horizontal: 12,
-                                                          vertical: 10),
+                                                // Move left button
+                                                if (index > 0)
+                                                  Positioned(
+                                                    bottom: 8,
+                                                    left: 8,
+                                                    child: Container(
                                                       decoration: BoxDecoration(
-                                                        color: Colors
-                                                            .green.shade50,
-                                                        border: Border.all(
-                                                            color: Colors
-                                                                .green.shade300,
-                                                            width: 1.5),
+                                                        color: Colors.blue.shade700,
                                                         borderRadius:
-                                                            BorderRadius
-                                                                .circular(4),
+                                                            BorderRadius.circular(20),
                                                       ),
-                                                      child: Row(
-                                                        children: [
-                                                          Expanded(
-                                                            child: Text(
-                                                              controller.text,
-                                                              style:
-                                                                  const TextStyle(
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                                color: Colors
-                                                                    .black87,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          IconButton(
-                                                            onPressed: () {
-                                                              // Force rebuild to show edit mode
-                                                              setState(() {
-                                                                _imageBarcodes
-                                                                    .remove(entry
-                                                                        .value);
-                                                              });
-                                                            },
-                                                            icon: const Icon(
-                                                                Icons.edit,
-                                                                size: 16),
-                                                            padding:
-                                                                EdgeInsets.zero,
-                                                            constraints:
-                                                                const BoxConstraints(
-                                                                    minWidth:
-                                                                        28,
-                                                                    minHeight:
-                                                                        28),
-                                                            style: IconButton
-                                                                .styleFrom(
-                                                              foregroundColor:
-                                                                  Colors.blue
-                                                                      .shade700,
-                                                            ),
-                                                          ),
-                                                        ],
+                                                      child: IconButton(
+                                                        icon: const Icon(
+                                                            Icons.arrow_back,
+                                                            color: Colors.white,
+                                                            size: 18),
+                                                        padding: EdgeInsets.zero,
+                                                        constraints:
+                                                            const BoxConstraints(
+                                                                minWidth: 32,
+                                                                minHeight: 32),
+                                                        onPressed: () => _moveImage(index, index - 1),
                                                       ),
-                                                    )
-                                                  else
-                                                    // Edit mode: Show input field and save button
-                                                    Column(
-                                                      children: [
-                                                        TextField(
-                                                          controller:
-                                                              controller,
-                                                          decoration:
-                                                              InputDecoration(
-                                                            hintText:
-                                                                'Ej: 1203023000012',
-                                                            hintStyle: TextStyle(
-                                                                fontSize: 11,
-                                                                color: Colors
-                                                                    .grey
-                                                                    .shade400),
-                                                            border:
-                                                                OutlineInputBorder(
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          4),
-                                                            ),
-                                                            contentPadding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        8,
-                                                                    vertical:
-                                                                        8),
-                                                            isDense: true,
-                                                          ),
-                                                          style:
-                                                              const TextStyle(
-                                                                  fontSize: 12),
-                                                        ),
-                                                        const SizedBox(
-                                                            height: 6),
-                                                        ElevatedButton.icon(
-                                                          onPressed: () =>
-                                                              _saveBarcode(
-                                                                  entry.key,
-                                                                  entry.value),
-                                                          icon: const Icon(
-                                                              Icons.save,
-                                                              size: 14),
-                                                          label: const Text(
-                                                            'Guardar',
-                                                            style: TextStyle(
-                                                                fontSize: 11),
-                                                          ),
-                                                          style: ElevatedButton
-                                                              .styleFrom(
-                                                            backgroundColor:
-                                                                Colors.blue,
-                                                            foregroundColor:
-                                                                Colors.white,
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                                    vertical:
-                                                                        8),
-                                                            shape:
-                                                                RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          4),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
                                                     ),
-                                                ],
+                                                  ),
+                                                // Move right button
+                                                if (index < _orderedImages.length - 1)
+                                                  Positioned(
+                                                    bottom: 8,
+                                                    right: 8,
+                                                    child: Container(
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.blue.shade700,
+                                                        borderRadius:
+                                                            BorderRadius.circular(20),
+                                                      ),
+                                                      child: IconButton(
+                                                        icon: const Icon(
+                                                            Icons.arrow_forward,
+                                                            color: Colors.white,
+                                                            size: 18),
+                                                        padding: EdgeInsets.zero,
+                                                        constraints:
+                                                            const BoxConstraints(
+                                                                minWidth: 32,
+                                                                minHeight: 32),
+                                                        onPressed: () => _moveImage(index, index + 1),
+                                                      ),
+                                                    ),
+                                                  ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                  ),
+                                )
+                              else
+                                // For small categories, use shrinkWrap (no separate scroll)
+                                GridView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.all(16),
+                                  gridDelegate:
+                                      const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 3,
+                                    crossAxisSpacing: 16,
+                                    mainAxisSpacing: 16,
+                                    childAspectRatio: 1.0,
+                                  ),
+                                  itemCount: _orderedImages.length,
+                                  itemBuilder: (context, index) {
+                                    final entry = _orderedImages[index];
+                                    
+                                    if (entry.value.isEmpty || !entry.value.startsWith('http')) {
+                                      return const SizedBox.shrink();
+                                    }
+
+                                    return Card(
+                                      key: ValueKey(entry.value),
+                                      elevation: 3,
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                              ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              child: Image.network(
+                                                entry.value,
+                                                fit: BoxFit.cover,
+                                                width: double.infinity,
+                                                height: double.infinity,
+                                                cacheWidth: 400,
+                                                errorBuilder: (context,
+                                                        error,
+                                                        stackTrace) =>
+                                                    Container(
+                                                  color:
+                                                      Colors.grey.shade300,
+                                                  child: const Icon(
+                                                      Icons.error,
+                                                      color: Colors.red),
+                                                ),
                                               ),
                                             ),
-                                          ),
+                                            Positioned(
+                                              top: 8,
+                                              left: 8,
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red,
+                                                  borderRadius:
+                                                      BorderRadius.circular(20),
+                                                ),
+                                                child: IconButton(
+                                                  icon: const Icon(
+                                                      Icons.delete,
+                                                      color: Colors.white,
+                                                      size: 18),
+                                                  padding: EdgeInsets.zero,
+                                                  constraints:
+                                                      const BoxConstraints(
+                                                          minWidth: 32,
+                                                          minHeight: 32),
+                                                  onPressed: () =>
+                                                      _deleteImage(
+                                                          entry.key,
+                                                          entry.value),
+                                                ),
+                                              ),
+                                            ),
+                                            if (index > 0)
+                                              Positioned(
+                                                bottom: 8,
+                                                left: 8,
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.blue.shade700,
+                                                    borderRadius:
+                                                        BorderRadius.circular(20),
+                                                  ),
+                                                  child: IconButton(
+                                                    icon: const Icon(
+                                                        Icons.arrow_back,
+                                                        color: Colors.white,
+                                                        size: 18),
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                            minWidth: 32,
+                                                            minHeight: 32),
+                                                    onPressed: () => _moveImage(index, index - 1),
+                                                  ),
+                                                ),
+                                              ),
+                                            if (index < _orderedImages.length - 1)
+                                              Positioned(
+                                                bottom: 8,
+                                                right: 8,
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.blue.shade700,
+                                                    borderRadius:
+                                                        BorderRadius.circular(20),
+                                                  ),
+                                                  child: IconButton(
+                                                    icon: const Icon(
+                                                        Icons.arrow_forward,
+                                                        color: Colors.white,
+                                                        size: 18),
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                            minWidth: 32,
+                                                            minHeight: 32),
+                                                    onPressed: () => _moveImage(index, index + 1),
+                                                  ),
+                                                ),
+                                              ),
                                         ],
                                       ),
                                     );

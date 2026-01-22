@@ -4,9 +4,9 @@
 
 Flutter web admin application for XEPI, a Guatemalan retail company. Manages inventory, sales, orders, and finances for ~600 decorative products across 1 warehouse + 1 store.
 
-**Current State:** Phase 1 admin CRUD complete and functional. Products (1,066) and Categories (24) migrated to Firestore. Full image management, category management with cover images, and product reordering implemented. Phase 2 screens are UI-only placeholders.
+**Current State:** Phase 1 (Products & Categories) complete. Phase 2 (Inventory Management) in progress - Recepciones and Movimientos fully functional with Firestore backend. Products (1,066) and Categories (24) migrated. Orders and Register Sale pending.
 
-**Current Phase:** Phase 1 Complete - Admin system ready for client site development
+**Current Phase:** Phase 2 - Inventory Management (50% complete)
 
 **Tech Stack:** Flutter (web), Firebase (Auth, Firestore, Storage, Hosting)  
 **Currency:** Guatemalan Quetzales (Q)  
@@ -32,21 +32,67 @@ Flutter web admin application for XEPI, a Guatemalan retail company. Manages inv
 - ✅ Financial reports (profit/loss, expense tracking, cash flow statements)
 - ✅ Business intelligence (data-driven decisions on what to stock/discontinue)
 
-### **10 Main Features (Pages, to be reviewed)**
-1. **Dashboard** - Financial summary, alerts, quick stats
-2. **Products** - 600+ product catalog (3 view modes: cards/table/list)
-3. **Categories** - Pricing structure, bulk pricing, category management
-4. **Orders** - WhatsApp/Facebook orders, status tracking (pending → paid)
-5. **Shipment Receipt** - Scan products as they arrive, auto-update warehouse stock
-6. **Stock Movements** - Transfer products warehouse ↔ store
-7. **Register Sales** - POS transactions (store + delivery), payment tracking
-8. **Finances** - Cash pending by source (store/messenger/Forza), deposits, expenses (superuser only)
-9. **Reports** - Sales, inventory, product performance, financial reports
-10. **Settings** - User management, WhatsApp config, alerts configuration
+### **10 Main Features (Admin Side)**
+1. **Dashboard** - Per-user personalized view with quick actions, pending tasks, data summaries
+2. **Products** - 1,066+ product catalog (3 view modes: cards/table/list, sort options, comments field)
+3. **Categories** - Pricing structure, bulk pricing, category management (nested structure with CRUD)
+4. **Orders** - WhatsApp/Facebook orders, status tracking (pending → delivered → paid → completed)
+5. **Shipment Receipt** - Scan products as they arrive (contenedores), auto-update warehouse stock
+6. **Stock Movements** - Transfer products warehouse ↔ store, approval workflow
+7. **Register Sales** - POS transactions (store + delivery), payment tracking (efectivo/transferencia/tarjeta)
+8. **Finances** - Cash pending by source, deposits with photos, expenses tracking (superuser only)
+9. **Reports** - Dynamic tables & charts, sales/inventory/financial reports, export functionality
+10. **Settings** - User management with granular permissions, WhatsApp config, alerts
 
-### **User Roles**
-- **Superuser (Mom):** Full access including finances, expenses, profit/loss, user management
-- **Employee:** Operations only (products, orders, inventory, sales) - NO finance access
+### **Client-Side App (Public)**
+1. **Product Browsing** - View all active products with images
+2. **Category Navigation** - Organized by primary category → subcategory
+3. **Product Detail Pages** - Individual product pages with full info
+4. **Shopping Cart** - Persistent storage, add/remove items
+5. **Search & Filters** - By name, tema (topic), category, subcategory
+6. **WhatsApp Integration** - Send cart contents as WhatsApp message
+7. **Product URLs** - Direct links to specific products
+8. **Footer** - Important business info (hours, location, contact)
+Note: Out of stock products are hidden from client view
+
+### **User Roles & Permissions**
+
+**NOTE: User management and role-based permissions will be implemented LAST. All features must work fully for superuser first before adding multi-user support.**
+
+- **Superuser (Mom):**
+  - Full access to all features
+  - View finances, expenses, profit/loss
+  - Approve/deny critical changes (bulk deletes, etc.)
+  - Confirm deposits and payments
+  - Manage all user permissions
+  - User management dashboard
+
+- **Marta (Main Employee):**
+  - Modify products and categories
+  - Register sales (kiosko + delivery)
+  - Report deposits (cash from sales)
+  - Request stock from warehouse
+  - Receive shipments (contenedores)
+  - Critical actions require superuser approval
+  - NO finance access
+
+- **Empleado Kiosko (Temporary Vacationist):**
+  - Register kiosko sales only
+  - View products and stock
+  - Limited permissions (customizable)
+  - Temporary account
+
+- **Clarita (Warehouse Staff):**
+  - Send stock from warehouse to store
+  - View and fulfill stock requests
+  - Receive shipments (contenedores)
+  - NO sales or finance access
+
+- **Sergio (Delivery Driver/Messenger):**
+  - View assigned delivery orders only
+  - Change delivery status (picked_up → delivered)
+  - Report deposits (cash from deliveries)
+  - NO access to sales creation or inventory
 
 ### **Product Categories**
 1. Cuadros de Latón (20x30, 30x40, Círculos, Flechas, Escudos, etc) - ~500 variations (some sizes have bulk pricing)
@@ -96,18 +142,30 @@ Cuadros de latón | 30x40 cms | 59
 
 ### 3-Phase Implementation
 
-**Phase 1 (Fully Functional - Firestore Backend):**
+**Phase 1: Products & Categories Management (✅ Complete)**
 - Dashboard (`dashboard_screen.dart`) - Overview, stats, alerts
-- Products (`products_list_screen.dart`, `product_detail_screen.dart`, `add_product_screen.dart`) - Full CRUD with image management
-- Categories (`categories_list_screen.dart`, `category_detail_screen.dart`) - Cover images, product reordering
+- Products (`products_list_screen.dart`, `product_detail_screen.dart`, `add_product_screen.dart`) - Full CRUD with image management, sort options (name, price, stock)
+- Categories (`categories_list_screen.dart`, `category_detail_screen.dart`) - Nested structure, cover images, product reordering, add/delete categories, isActive toggle, bulk pricing editor, display order management
 - Settings (`settings_screen.dart`) - User management, config
 
-**Phase 2 (UI ONLY - Mock data):**  
-Located in `lib/screens/future/`:
-- Finances (`finances_screen.dart`) - Cash tracking, deposits, expenses
-- Orders, Shipments, Movements, Register Sale, Reports
-- Show snackbar: "Phase 2: Solo UI disponible. Funcionalidad próximamente."
-- Visual indicator: 🔒 lock icon (see `main_layout.dart` for pattern)
+**Phase 2: Inventory Management (🔄 In Progress - 50% complete)**
+- ✅ Recepciones (`shipment_history_screen.dart`, `receive_shipment_screen.dart`, `shipment_detail_screen.dart`) - Scan products as they arrive, auto-update warehouse stock, shipment history with complete/cancel actions
+- ✅ Movimientos (`movement_history_screen.dart`, `transfer_stock_screen.dart`, `movement_detail_screen.dart`) - Transfer products warehouse ↔ store, two-step workflow (send deducts origin, receive adds destination), edit/delete/undo operations
+- ❌ Pedidos (`orders_list_screen.dart`, `order_detail_screen.dart`) - UI only, needs backend
+- ❌ Registrar Venta (`register_sale_screen.dart`, `sales_history_screen.dart`) - UI only, needs backend
+
+**Phase 3: Financial Management & Reports (🔄 Starting)**
+Located in `lib/screens/`:
+- Finanzas (`finances_screen.dart`) - Cash tracking overview, deposits summary, pending cash cards
+- Gastos (`expenses_list_screen.dart`) - Expense submission (employee/admin), list & filters
+- Categorías de Gastos (`expense_categories_screen.dart`) - Admin-managed categories (operativo/no_operativo)
+- Reportes (`reports_screen.dart`) - Sales, inventory, product performance, financial reports
+  - Dynamic tables with sorting/filtering
+  - Interactive charts (pie, bar, line)
+  - Export functionality (PDF, Excel, CSV)
+  - Date range selectors
+  - Custom report builders
+Note: Phase 3 screens initially use mock data; Firestore integration will be added incrementally.
 
 **Legacy Code:**  
 - `admin_dashboard_legacy.dart` - OLD system, uses Realtime DB + Firestore hybrid
@@ -124,19 +182,24 @@ Located in `lib/screens/future/`:
 
 **Current State:**
 - Authentication via `FirebaseAuth` (email/password)
-- Firestore collections: `products`, `categories`, `temas`
-- Storage structure: `products/{barcode}/{filename}`, `categories/{categoryId}/cover.jpg`
+- Firestore collections: `products`, `categories` (nested subcollections), `temas`
+- Storage structure: `products/{barcode}/{filename}`, `categories/{primaryName}/cover.jpg`, `categories/{primaryName}/subcategories/{code}/cover.jpg`
 - Composite indexes deployed for queries
+- Nested category structure: `categories/{primaryName}/subcategories/{code}`
 
 **Products Collection:**
 - Document ID: barcode (13-digit string)
-- Fields: barcode, name, categoryCode, primaryCategory, subcategory, images[], priceOverride, stockWarehouse, stockStore, isActive, displayOrder, temas[], size, sizeFormatted, warehouseCode, createdAt, updatedAt
+- Fields: barcode, name, categoryCode, primaryCategory, subcategory, images[], priceOverride, stockWarehouse, stockStore, isActive, displayOrder, temas[], size, sizeFormatted, warehouseCode, comments, createdAt, updatedAt
 - Query pattern: `.where('categoryCode', isEqualTo: code).orderBy('displayOrder')`
+- Phase 3 addition: `costPrice` (number, optional) used for profit calculations
+- Comments field: Optional text for internal notes about the product
 
 **Categories Collection:**
-- Document ID: category code (e.g., "LAT-2030")
-- Fields: code, name, primaryCategory, primaryCode, subcategoryName, defaultPrice, coverImageUrl, bulkPricing, isActive, displayOrder, hasSubcategories
-- 24 categories grouped into 8 primary categories
+- Structure: Nested subcollections `categories/{primaryName}/subcategories/{code}`
+- Primary category fields: name, coverImageUrl, displayOrder, createdAt, updatedAt
+- Subcategory fields: code, name, primaryCategory, primaryCode, subcategoryName, defaultPrice, coverImageUrl, bulkPricing, isActive, displayOrder, hasSubcategories
+- 24 subcategories grouped into 8 primary categories
+- Bulk pricing format: `{qty2: number, qty5Plus: number}` for volume discounts
 
 **Temas Collection:**
 - Separate collection for performance (50x faster than scanning all products)
@@ -156,11 +219,20 @@ await Firebase.initializeApp(
 );
 ```
 
-**Firestore Collections Design** (implemented):
+**Firestore Collections Design:**
 - `categories/` - Product categories with default pricing, cover images
 - `products/` - Individual products (barcode as doc ID) with images, stock, pricing
 - `temas/` - Design themes for filtering/autocomplete
-- Future: `orders/`, `sales/`, `shipments/`, `movements/`, `deposits/`, `expenses/`, `users/`, `notifications/`
+- `shipments/` - Shipment receipts (status: pending, completed, cancelled)
+- `movements/` - Stock transfers (status: pending, sent, received, cancelled)
+- `locations/` - Warehouse and store location metadata (stockField mappings)
+- `sales/` - Sales records (kiosko + delivery) with payment/delivery tracking
+- `deposits/` - Deposit records with comprobante photos, linked to sales
+- `pendingCash/` - Real-time pending cash by source (store/mensajero/forza)
+- `expenses/` - Operational and non-operational expenses with approval workflow
+- `expense_categories/` - Admin-managed categories with `type: 'operativo' | 'no_operativo'`
+- `users/` - User accounts with role-based permissions
+- Future: `orders/`, `notifications/`, `reports/`
 
 ## Design System
 
@@ -275,6 +347,11 @@ finalPrice = product.priceOverride ?? category.defaultPrice;
 - Table: Spreadsheet-style with inline editing
 - List: Compact, maximum density
 
+**Sort Options (Products):**
+- Nombre (A-Z) / Nombre (Z-A)
+- Precio (menor) / Precio (mayor)
+- Stock (menor) / Stock (mayor)
+
 ## Recommended Build Order
 
 ### **Phase 1A: Products Foundation (Weeks 1-2)**
@@ -360,27 +437,102 @@ flutter format lib/
 - Manual cash tracking
 - WhatsApp orders handled via chat (no system)
 
-**Sales Channels:**
-1. In-store (direct POS) - mostly card, some cash
-2. WhatsApp/Facebook orders → delivery (pre-paid, COD)
+**Sales & Delivery System:**
 
-**Cash Flow Tracking (Critical Pain Point):**
-- Store cash drawer → weekly deposits (alert if >7 days)
-- Messenger COD → deposit after collection
-- Forza COD → deposit after collection
-- Card or bank transfer payments auto-deposited (no tracking needed)
-- **Goal:** Know exactly where every quetzal is at all times
+**Payment Methods:**
+- **Efectivo** (Cash) - requires deposit with comprobante photo
+- **Transferencia Bancaria** (Bank transfer) - requires superuser payment verification
+- **Tarjeta** (Credit/debit card via POS device) - requires superuser payment verification, employee uploads POS summary photo
+
+**Sale Types (internal):**
+- **Kiosko** (store sales) - customer buys at physical store
+- **Delivery** (mensajero or Forza) - delivery to customer address
+
+**Delivery Methods:**
+- **Mensajero** (own delivery guy) - can track picked_up/delivered/paid with own account (Phase 2C)
+- **Forza** (third-party delivery company) - employee tracks shipped/delivered
+
+**Register Sale Screen:**
+- Same screen for kiosko and delivery
+- Toggle sale type: when "Delivery" selected → show address + delivery method fields
+- Customer info: name optional for kiosko, required for delivery (phone + address required for delivery)
+- NIT required for all sales (default "CF" for consumidor final)
+- Stock deduction: default from store, rare option for warehouse
+- Payment approval: transferencia/tarjeta sales marked pending_approval until superuser confirms
+
+**Stock States:**
+- `stockWarehouse` - products in warehouse
+- `stockStore` - products in store  
+- `stockInTransit` - delivery sales not paid yet (prevents double-counting)
+- When delivery paid → remove from in_transit, deduct from origin location
+
+**Sale Record Structure:**
+```
+{
+  saleId: auto-generated
+  saleType: 'kiosko' | 'delivery'
+  deliveryMethod: null | 'mensajero' | 'forza'
+  paymentMethod: 'efectivo' | 'transferencia' | 'tarjeta'
+  items: [{barcode, name, quantity, unitPrice, subtotal}]
+  subtotal: number
+  discount: number
+  total: number
+  nit: string (required, "CF" if no factura)
+  
+  // Customer
+  customerName: optional kiosko, required delivery
+  customerPhone: optional kiosko, required delivery
+  deliveryAddress: null kiosko, required delivery
+  
+  // Stock
+  deductFrom: 'store' | 'warehouse'
+  stockStatus: 'completed' | 'in_transit'
+  
+  // Payment
+  paymentVerified: boolean (superuser confirms)
+  status: 'pending_approval' | 'approved'
+  
+  // Deposit
+  depositId: links to deposit record
+  
+  // Delivery tracking
+  deliveryStatus: 'pending' | 'picked_up' | 'delivered' | 'completed'
+  pickedUpAt, pickedUpBy, deliveredAt
+  
+  // Audit
+  createdBy: userId
+  createdAt: timestamp
+}
+```
+
+**Deposits:**
+- One deposit covers multiple sales
+- Store comprobante photos: `deposits/{depositId}/comprobante.jpg`
+- Sales link to depositId for tracking
+- Required for efectivo (all locations) and tarjeta (POS summary)
+ - Example `deposits` document fields:
+   - `amount` (number), `source` ('store'|'mensajero'|'forza'), `comprobanteUrl` (string)
+   - `createdAt`, `depositedAt` (timestamps), `depositedBy` (uid), `saleIds` (array of saleId strings), `notes` (string)
+
+**Cash Flow Tracking:**
+- Efectivo at kiosko → pending cash source: 'store', needs deposit
+- Efectivo delivery mensajero → pending cash source: 'mensajero', needs deposit
+- Efectivo delivery Forza → pending cash source: 'forza', needs deposit
+- Transferencia → superuser verifies payment received at bank
+- Tarjeta → superuser verifies payment + employee uploads POS summary
+- **Goal:** Track every quetzal until deposited
 
 **Inventory Flow:**
 - Shipments → Warehouse first (always)
-- Warehouse → Store (transfers on demand, requested by store)
-- Sales deduct from store
-- Deliveries go out from store
-- Stock tracking: 2 locations (warehouse, store)
+- Warehouse → Store (transfers on demand)
+- Sales default deduct from store (rare warehouse option)
+- Deliveries go out from store (or warehouse if selected)
+- Stock tracking: warehouse + store + in_transit
 
-**User Roles (Phase 2):**
-- Superuser (Mom): Full access (finances, deposits, expenses, user management)
-- Employee: Operations only (products, orders, inventory, sales) - NO finance access
+**User Roles:**
+- **Superuser (Mom):** Full access, approves payments (transferencia/tarjeta), views finances
+- **Employee:** Create sales (pending approval), operations only, NO finance access
+- **Mensajero (Phase 2C):** Own deliveries only, mark picked_up/delivered/paid
 
 **Product Data:**
 - ~600 products across multiple categories
@@ -454,6 +606,33 @@ if (paymentMethod == 'cash') {
   
   // Auto-added to pending balance, cleared on deposit
   await updatePendingCash(source, saleTotal);
+}
+```
+
+**Expenses Collection (Phase 3):**
+```
+{
+  amount: number,
+  category: string,           // e.g., 'Salarios', 'Inventarios', 'Publicidad y marketing'
+  categoryType: 'operativo' | 'no_operativo',
+  description: string,
+  receiptUrl: string | null,  // Storage path: expenses/{expenseId}/receipt.jpg
+  status: 'pending_approval' | 'approved' | 'rejected',
+  createdBy: uid,
+  createdAt: timestamp,
+  approvedBy: uid | null,
+  approvedAt: timestamp | null,
+}
+```
+
+**Expense Categories Collection (Phase 3):**
+```
+{
+  name: string,
+  type: 'operativo' | 'no_operativo',
+  displayOrder: number,
+  isActive: boolean,
+  createdAt, updatedAt
 }
 ```
 

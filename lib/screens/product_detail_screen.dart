@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'package:image_picker/image_picker.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
+import 'package:xepi_imgadmin/services/auth_service.dart';
 
 /// Product detail screen with image gallery and full product information
 class ProductDetailScreen extends StatefulWidget {
@@ -35,8 +36,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late TextEditingController _colorController;
   late TextEditingController _notesController;
   late TextEditingController _priceOverrideController;
+  late TextEditingController _costPriceController;
   late TextEditingController _warehouseCodeController;
-  late TextEditingController _categoryCodeController;
   late TextEditingController _widthController;
   late TextEditingController _heightController;
 
@@ -49,10 +50,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   List<Map<String, dynamic>> _allCategories = [];
   List<String> _availableSubcategories = [];
   bool _categoriesLoaded = false;
+  String?
+      _loadedCategoryCode; // Track which category is loaded to prevent reloading
 
   // Selected category/subcategory
   String? _selectedPrimaryCategory;
   String? _selectedSubcategory;
+  String? _selectedCategoryId;
+  String? _selectedCategoryCode;
+  String? _selectedCategoryName;
   String _selectedSizeUnit = 'cms';
 
   // Temas chips
@@ -100,8 +106,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     _colorController.removeListener(_checkForChanges);
     _notesController.removeListener(_checkForChanges);
     _priceOverrideController.removeListener(_checkForChanges);
+    _costPriceController.removeListener(_checkForChanges);
     _warehouseCodeController.removeListener(_checkForChanges);
-    _categoryCodeController.removeListener(_checkForChanges);
     _widthController.removeListener(_checkForChanges);
     _heightController.removeListener(_checkForChanges);
     _warehouseStockAdjustmentController.removeListener(_checkForChanges);
@@ -113,8 +119,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     _colorController.dispose();
     _notesController.dispose();
     _priceOverrideController.dispose();
+    _costPriceController.dispose();
     _warehouseCodeController.dispose();
-    _categoryCodeController.dispose();
     _widthController.dispose();
     _heightController.dispose();
     _warehouseStockAdjustmentController.dispose();
@@ -160,15 +166,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
     _priceOverrideController.addListener(_checkForChanges);
 
+    _costPriceController = TextEditingController(
+      text: product['costPrice']?.toString() ?? '',
+    );
+    _costPriceController.addListener(_checkForChanges);
+
     _warehouseCodeController = TextEditingController(
       text: product['warehouseCode'] ?? '',
     );
     _warehouseCodeController.addListener(_checkForChanges);
-
-    _categoryCodeController = TextEditingController(
-      text: product['categoryCode'] ?? '',
-    );
-    _categoryCodeController.addListener(_checkForChanges);
 
     // Parse size if exists
     final sizeFormatted = product['sizeFormatted'] as String?;
@@ -204,6 +210,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     // Initialize category selections
     _selectedPrimaryCategory = product['primaryCategory'];
     _selectedSubcategory = product['subcategory'];
+    _selectedCategoryId = product['categoryId'];
+    _selectedCategoryCode = product['categoryCode'];
+    _selectedCategoryName = product['categoryName'];
 
     // Initialize stock adjustment controllers
     _warehouseStockAdjustmentController = TextEditingController(text: '0');
@@ -218,6 +227,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Future<void> _loadCategoryData(String? categoryCode) async {
     if (categoryCode == null || categoryCode.isEmpty) return;
 
+    // Don't reload if already loaded this category
+    if (_loadedCategoryCode == categoryCode && _categoryData != null) return;
+
     try {
       // Find the category in the already-loaded categories list
       final category = _allCategories.firstWhere(
@@ -225,9 +237,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         orElse: () => {},
       );
 
-      if (category.isNotEmpty) {
+      if (category.isNotEmpty && mounted) {
         setState(() {
           _categoryData = category;
+          _loadedCategoryCode = categoryCode;
         });
       }
     } catch (e) {
@@ -246,7 +259,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
       // For each primary category, load its subcategories
       for (var primaryDoc in primarySnapshot.docs) {
-        final primaryData = primaryDoc.data();
         final primaryName = primaryDoc.id;
 
         // Load subcategories
@@ -265,6 +277,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           });
         }
       }
+
+      if (!mounted) return;
 
       setState(() {
         _allCategories = categories;
@@ -420,11 +434,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         // Initialize controllers once
         _initializeControllers(product);
 
-        // Load category data if not loaded (async, doesn't block UI)
-        if (_categoryData == null && product['categoryCode'] != null) {
-          _loadCategoryData(product['categoryCode']);
-        }
-
         // Show loading indicator while initial data loads
         if (_isLoadingInitialData) {
           return const Scaffold(
@@ -432,6 +441,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               child: CircularProgressIndicator(),
             ),
           );
+        }
+
+        // Load category data if not loaded (async, doesn't block UI)
+        if (product['categoryCode'] != null && _categoriesLoaded) {
+          _loadCategoryData(product['categoryCode']);
         }
 
         return _buildProductDetail(product, images, isActive);
@@ -569,18 +583,48 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ],
                 ),
                 const SizedBox(width: AppTheme.spacingL),
-                // Delete Button
-                OutlinedButton.icon(
-                  onPressed: () {
-                    _showDeleteDialog();
-                  },
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  label: const Text('Eliminar'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.danger,
-                    side: const BorderSide(color: AppTheme.danger),
+                // Delete Button (SUPERUSER ONLY)
+                if (AuthService.isSuperuser)
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      _showDeleteDialog();
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('Eliminar'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.danger,
+                      side: const BorderSide(color: AppTheme.danger),
+                    ),
                   ),
-                ),
+                // Employee sees request deletion message
+                if (!AuthService.isSuperuser)
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Row(
+                            children: [
+                              Icon(Icons.info_outline_rounded,
+                                  color: AppTheme.white),
+                              SizedBox(width: AppTheme.spacingM),
+                              Expanded(
+                                child: Text(
+                                    'Contacta al administrador para eliminar productos'),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: AppTheme.blue,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('Solicitar Eliminación'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.mediumGray,
+                      side: const BorderSide(color: AppTheme.lightGray),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1024,7 +1068,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
           const SizedBox(height: AppTheme.spacingS),
 
-          // Location Breakdown
+          // Location Breakdown (visible to all)
           Row(
             children: [
               Expanded(
@@ -1047,44 +1091,45 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
           const SizedBox(height: AppTheme.spacingM),
 
-          // Stock Adjustment Controls - compact
-          Container(
-            padding: const EdgeInsets.all(AppTheme.spacingS),
-            decoration: BoxDecoration(
-              color: AppTheme.backgroundGray,
-              borderRadius: AppTheme.borderRadiusSmall,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Ajustar Stock',
-                  style: AppTheme.bodySmall.copyWith(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
+          // Stock Adjustment Controls - compact (SUPERUSER ONLY)
+          if (AuthService.isSuperuser)
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingS),
+              decoration: BoxDecoration(
+                color: AppTheme.backgroundGray,
+                borderRadius: AppTheme.borderRadiusSmall,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ajustar Stock',
+                    style: AppTheme.bodySmall.copyWith(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
                   ),
-                ),
-                const SizedBox(height: AppTheme.spacingS),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStockAdjuster(
-                        'Bodega',
-                        _warehouseStockAdjustmentController,
+                  const SizedBox(height: AppTheme.spacingS),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStockAdjuster(
+                          'Bodega',
+                          _warehouseStockAdjustmentController,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: AppTheme.spacingM),
-                    Expanded(
-                      child: _buildStockAdjuster(
-                        'Kiosco',
-                        _storeStockAdjustmentController,
+                      const SizedBox(width: AppTheme.spacingM),
+                      Expanded(
+                        child: _buildStockAdjuster(
+                          'Kiosco',
+                          _storeStockAdjustmentController,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1150,53 +1195,82 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
           const SizedBox(height: AppTheme.spacingM),
 
-          // Price Override Input - compact
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Precio Personalizado',
-                style: AppTheme.bodySmall.copyWith(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 11,
-                ),
-              ),
-              const SizedBox(height: AppTheme.spacingXS),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _priceOverrideController,
-                      decoration: InputDecoration(
-                        hintText: _categoryData != null
-                            ? 'Q${_categoryData!['defaultPrice'] ?? '0.00'} (por defecto)'
-                            : 'Vacío = precio de categoría',
-                        prefixText: 'Q',
-                        suffixIcon: product['priceOverride'] != null
-                            ? IconButton(
-                                icon:
-                                    const Icon(Icons.restore_rounded, size: 18),
-                                tooltip: 'Usar precio de categoría',
-                                onPressed: () {
-                                  setState(() {
-                                    _priceOverrideController.clear();
-                                  });
-                                },
-                              )
-                            : null,
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d+\.?\d{0,2}'),
-                        ),
-                      ],
-                    ),
+          // Price Override Input - compact (SUPERUSER ONLY)
+          if (AuthService.isSuperuser)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Precio Personalizado',
+                  style: AppTheme.bodySmall.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+                const SizedBox(height: AppTheme.spacingXS),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _priceOverrideController,
+                        decoration: InputDecoration(
+                          hintText: _categoryData != null
+                              ? 'Q${_categoryData!['defaultPrice'] ?? '0.00'} (por defecto)'
+                              : 'Vacío = precio de categoría',
+                          prefixText: 'Q',
+                          suffixIcon: product['priceOverride'] != null
+                              ? IconButton(
+                                  icon: const Icon(Icons.restore_rounded,
+                                      size: 18),
+                                  tooltip: 'Usar precio de categoría',
+                                  onPressed: () {
+                                    setState(() {
+                                      _priceOverrideController.clear();
+                                    });
+                                  },
+                                )
+                              : null,
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d+\.?\d{0,2}'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppTheme.spacingL),
+                Text(
+                  'Costo (Q)',
+                  style: AppTheme.bodySmall.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: AppTheme.spacingXS),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _costPriceController,
+                        decoration: const InputDecoration(
+                          hintText: 'Costo del producto (opcional)',
+                          prefixText: 'Q',
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d+\.?\d{0,2}'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -1321,11 +1395,38 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           onChanged: _selectedPrimaryCategory == null
                               ? null
                               : (value) {
+                                  // Find the full category data for this subcategory
+                                  final selectedCategory =
+                                      _allCategories.firstWhere(
+                                    (cat) =>
+                                        cat['primaryCategory'] ==
+                                            _selectedPrimaryCategory &&
+                                        cat['subcategoryName'] == value,
+                                    orElse: () => {},
+                                  );
+
                                   setState(() {
                                     _selectedSubcategory = value;
+                                    if (selectedCategory.isNotEmpty) {
+                                      // Update category code, ID, and name to match the selected subcategory
+                                      _selectedCategoryId =
+                                          selectedCategory['id'];
+                                      _selectedCategoryCode =
+                                          selectedCategory['code'];
+                                      _selectedCategoryName =
+                                          selectedCategory['name'];
+                                    }
                                   });
                                   _checkForChanges();
                                 },
+                          validator: _availableSubcategories.length > 1
+                              ? (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Selecciona una subcategoría';
+                                  }
+                                  return null;
+                                }
+                              : null,
                         ),
                       ],
                     ),
@@ -1359,26 +1460,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                   const SizedBox(width: AppTheme.spacingM),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Código de Categoría',
-                          style: AppTheme.bodyMedium.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: AppTheme.spacingS),
-                        TextField(
-                          controller: _categoryCodeController,
-                          decoration: const InputDecoration(
-                            hintText: 'CUA-2030',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
 
@@ -1653,10 +1734,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
     if (_warehouseCodeController.text !=
         (_originalProduct!['warehouseCode'] ?? '')) {
-      return true;
-    }
-    if (_categoryCodeController.text !=
-        (_originalProduct!['categoryCode'] ?? '')) {
       return true;
     }
 
@@ -2042,18 +2119,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       }
       if (_selectedSubcategory != currentProduct['subcategory']) {
         updates['subcategory'] = _selectedSubcategory;
+        // Also update categoryCode, categoryId, and categoryName to match the subcategory
+        if (_selectedCategoryCode != null) {
+          updates['categoryCode'] = _selectedCategoryCode;
+        }
+        if (_selectedCategoryId != null) {
+          updates['categoryId'] = _selectedCategoryId;
+        }
+        if (_selectedCategoryName != null) {
+          updates['categoryName'] = _selectedCategoryName;
+        }
       }
 
       // Update warehouse code
       if (_warehouseCodeController.text.trim() !=
           (currentProduct['warehouseCode'] ?? '')) {
         updates['warehouseCode'] = _warehouseCodeController.text.trim();
-      }
-
-      // Update category code
-      if (_categoryCodeController.text.trim() !=
-          (currentProduct['categoryCode'] ?? '')) {
-        updates['categoryCode'] = _categoryCodeController.text.trim();
       }
 
       // Update size
@@ -2093,6 +2174,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         if (newPrice != null &&
             newPrice != (currentProduct['priceOverride'] ?? 0)) {
           updates['priceOverride'] = newPrice;
+        }
+      }
+
+      // Update cost price
+      final costText = _costPriceController.text.trim();
+      if (costText.isEmpty) {
+        if (currentProduct['costPrice'] != null) {
+          updates['costPrice'] = null;
+        }
+      } else {
+        final newCost = double.tryParse(costText);
+        if (newCost != null && newCost != (currentProduct['costPrice'] ?? 0)) {
+          updates['costPrice'] = newCost;
         }
       }
 
@@ -2287,6 +2381,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             IconButton(
               onPressed: () {
                 final newValue = currentAdjustment - 1;
+                // TODO fix
                 controller.text = newValue.toString();
               },
               icon: const Icon(Icons.remove_circle_outline_rounded),

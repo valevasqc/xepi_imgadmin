@@ -7,7 +7,9 @@ import 'package:xepi_imgadmin/config/app_theme.dart';
 
 /// Add new product screen with barcode scanning
 class AddProductScreen extends StatefulWidget {
-  const AddProductScreen({super.key});
+  final String? prefilledBarcode;
+
+  const AddProductScreen({super.key, this.prefilledBarcode});
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -33,13 +35,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   String? _selectedCategoryId;
   String? _selectedCategoryCode;
+  String? _selectedPrimaryCategory;
   String? _selectedSubcategory;
   bool _isLoading = false;
   bool _isSaving = false;
   bool _isUploading = false;
 
   List<Map<String, dynamic>> _categories = [];
-  List<String> _availableSubcategories = [];
+  Map<String, List<Map<String, dynamic>>> _categoriesByPrimary = {};
+  List<Map<String, dynamic>> _availableSubcategories = [];
   List<String> _allTemas = [];
   final List<String> _selectedTemas = [];
   final List<String> _uploadedImages = [];
@@ -48,6 +52,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.prefilledBarcode != null) {
+      _barcodeController.text = widget.prefilledBarcode!;
+    }
     _loadCategories();
     _loadTemas();
   }
@@ -58,19 +65,39 @@ class _AddProductScreenState extends State<AddProductScreen> {
     });
 
     try {
-      final snapshot = await _firestore.collection('categories').get();
-      setState(() {
-        _categories = snapshot.docs.map((doc) {
-          final data = doc.data();
-          return {
-            'id': doc.id,
-            'code': data['code'] ?? '',
-            'name': data['name'] ?? '',
-            'subcategories':
-                (data['subcategories'] as List?)?.cast<String>() ?? [],
-            'defaultPrice': data['defaultPrice'],
+      // Load primary categories
+      final primarySnapshot = await _firestore.collection('categories').get();
+
+      final List<Map<String, dynamic>> allCategories = [];
+      final Map<String, List<Map<String, dynamic>>> categoriesByPrimary = {};
+
+      // For each primary category, load its subcategories
+      for (var primaryDoc in primarySnapshot.docs) {
+        final primaryName = primaryDoc.id;
+        categoriesByPrimary[primaryName] = [];
+
+        // Load subcategories
+        final subSnapshot =
+            await primaryDoc.reference.collection('subcategories').get();
+
+        for (var subDoc in subSnapshot.docs) {
+          final subData = subDoc.data();
+          final categoryData = {
+            'id': subDoc.id, // Subcategory code (e.g., "LAT-2030")
+            'code': subData['code'] as String?,
+            'name': subData['name'] as String?,
+            'primaryCategory': primaryName,
+            'subcategoryName': subData['subcategoryName'] as String? ?? '',
+            'defaultPrice': subData['defaultPrice'],
           };
-        }).toList();
+          allCategories.add(categoryData);
+          categoriesByPrimary[primaryName]!.add(categoryData);
+        }
+      }
+
+      setState(() {
+        _categories = allCategories;
+        _categoriesByPrimary = categoriesByPrimary;
         _categories.sort(
             (a, b) => (a['name'] as String).compareTo(b['name'] as String));
         _isLoading = false;
@@ -83,16 +110,26 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  void _onCategoryChanged(String? categoryId) {
-    if (categoryId == null) return;
+  void _onCategoryChanged(String? primaryCategoryName) {
+    if (primaryCategoryName == null) return;
 
-    final category = _categories.firstWhere((c) => c['id'] == categoryId);
     setState(() {
-      _selectedCategoryId = categoryId;
-      _selectedCategoryCode = category['code'];
-      _availableSubcategories =
-          (category['subcategories'] as List).cast<String>();
+      _selectedPrimaryCategory = primaryCategoryName;
+      _availableSubcategories = _categoriesByPrimary[primaryCategoryName] ?? [];
       _selectedSubcategory = null; // Reset subcategory
+      _selectedCategoryId = null;
+      _selectedCategoryCode = null;
+    });
+  }
+
+  void _onSubcategoryChanged(String? subcategoryId) {
+    if (subcategoryId == null) return;
+
+    final category = _categories.firstWhere((c) => c['id'] == subcategoryId);
+    setState(() {
+      _selectedSubcategory = category['subcategoryName'] as String?;
+      _selectedCategoryId = subcategoryId;
+      _selectedCategoryCode = category['code'];
     });
   }
 
@@ -214,8 +251,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                   hintText: 'Ej: Cuadro de Latón Paisaje',
                                 ),
                                 validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'El nombre es requerido';
+                                  final name = value?.trim() ?? '';
+                                  final warehouseCode =
+                                      _warehouseCodeController.text.trim();
+
+                                  if (name.isEmpty && warehouseCode.isEmpty) {
+                                    return 'Nombre o Código de Bodega requerido';
                                   }
                                   return null;
                                 },
@@ -231,8 +272,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                         hintText: 'Ej: COD-56',
                                       ),
                                       validator: (value) {
-                                        if (value == null || value.isEmpty) {
-                                          return 'El código es requerido';
+                                        final warehouseCode =
+                                            value?.trim() ?? '';
+                                        final name =
+                                            _nameController.text.trim();
+
+                                        if (name.isEmpty &&
+                                            warehouseCode.isEmpty) {
+                                          return 'Nombre o Código de Bodega requerido';
                                         }
                                         return null;
                                       },
@@ -245,15 +292,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                             child: CircularProgressIndicator(),
                                           )
                                         : DropdownButtonFormField<String>(
-                                            initialValue: _selectedCategoryId,
+                                            initialValue:
+                                                _selectedPrimaryCategory,
                                             decoration: const InputDecoration(
-                                              labelText: 'Categoría',
+                                              labelText: 'Categoría Principal',
                                             ),
-                                            items: _categories.map((category) {
+                                            items: _categoriesByPrimary.keys
+                                                .map((primaryName) {
                                               return DropdownMenuItem<String>(
-                                                value: category['id'],
-                                                child: Text(
-                                                    category['name'] as String),
+                                                value: primaryName,
+                                                child: Text(primaryName),
                                               );
                                             }).toList(),
                                             onChanged: _onCategoryChanged,
@@ -270,21 +318,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               if (_availableSubcategories.isNotEmpty) ...[
                                 const SizedBox(height: AppTheme.spacingM),
                                 DropdownButtonFormField<String>(
-                                  initialValue: _selectedSubcategory,
+                                  initialValue: _selectedCategoryId,
                                   decoration: const InputDecoration(
                                     labelText: 'Subcategoría',
                                   ),
                                   items: _availableSubcategories.map((sub) {
                                     return DropdownMenuItem<String>(
-                                      value: sub,
-                                      child: Text(sub),
+                                      value: sub['id'],
+                                      child: Text(sub['name'] as String),
                                     );
                                   }).toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedSubcategory = value;
-                                    });
-                                  },
+                                  onChanged: _onSubcategoryChanged,
+                                  validator: _availableSubcategories.length > 1
+                                      ? (value) {
+                                          if (value == null || value.isEmpty) {
+                                            return 'Selecciona una subcategoría';
+                                          }
+                                          return null;
+                                        }
+                                      : null,
                                 ),
                               ],
                             ],
@@ -933,6 +985,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         'barcode': barcode,
         'name': _nameController.text.trim(),
         'warehouseCode': _warehouseCodeController.text.trim(),
+        'primaryCategory': _selectedPrimaryCategory,
         'categoryId': _selectedCategoryId,
         'categoryCode': _selectedCategoryCode,
         'categoryName': categoryName,

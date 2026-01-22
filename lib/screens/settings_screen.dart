@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
+import 'package:xepi_imgadmin/services/auth_service.dart';
 
 /// Settings screen with WhatsApp configuration and user profile
 class SettingsScreen extends StatefulWidget {
@@ -439,14 +440,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            onPressed: () {
-              // TODO: Logout and navigate to login
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Sesión cerrada'),
-                ),
-              );
+
+              try {
+                await AuthService.signOut();
+
+                if (context.mounted) {
+                  // Navigate back to login (main.dart will handle the redirect)
+                  Navigator.of(context).pushReplacementNamed('/');
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error al cerrar sesión: $e'),
+                      backgroundColor: AppTheme.danger,
+                    ),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.danger,

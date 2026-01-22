@@ -1,0 +1,18 @@
+{
+  "locations/warehouse": {
+    "id": "warehouse",
+    "name": "Bodega Principal",
+    "type": "warehouse",
+    "stockField": "stockWarehouse",
+    "isActive": true,
+    "displayOrder": 1
+  },
+  "locations/store": {
+    "id": "store",
+    "name": "Kiosco Zona 13",
+    "type": "store",
+    "stockField": "stockStore",
+    "isActive": true,
+    "displayOrder": 2
+  }
+}

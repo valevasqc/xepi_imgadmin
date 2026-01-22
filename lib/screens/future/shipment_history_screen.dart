@@ -1,9 +1,76 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/screens/future/receive_shipment_screen.dart';
+import 'package:xepi_imgadmin/screens/future/shipment_detail_screen.dart';
+import 'package:xepi_imgadmin/widgets/status_filter_chips.dart';
+import 'package:xepi_imgadmin/utils/date_formatter.dart';
+import 'package:xepi_imgadmin/utils/status_helper.dart';
 
-class ShipmentHistoryScreen extends StatelessWidget {
+class ShipmentHistoryScreen extends StatefulWidget {
   const ShipmentHistoryScreen({super.key});
+
+  @override
+  State<ShipmentHistoryScreen> createState() => _ShipmentHistoryScreenState();
+}
+
+class _ShipmentHistoryScreenState extends State<ShipmentHistoryScreen> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  List<Map<String, dynamic>> _shipments = [];
+  bool _isLoading = true;
+  String _statusFilter = 'all'; // all, completed, in-progress, cancelled
+
+  @override
+  void initState() {
+    super.initState();
+    _loadShipments();
+  }
+
+  Future<void> _loadShipments() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Load all shipments and filter/sort client-side to avoid needing composite index
+      final snapshot = await _firestore
+          .collection('shipments')
+          .orderBy('date', descending: true)
+          .get();
+
+      final allShipments = snapshot.docs.map((doc) {
+        return {
+          'id': doc.id,
+          ...doc.data(),
+        };
+      }).toList();
+
+      // Filter by status if needed
+      final filteredShipments = _statusFilter == 'all'
+          ? allShipments
+          : allShipments
+              .where((shipment) => shipment['status'] == _statusFilter)
+              .toList();
+
+      setState(() {
+        _shipments = filteredShipments;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar recepciones: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,11 +87,18 @@ class ShipmentHistoryScreen extends StatelessWidget {
                 Text('Historial de Recepciones', style: AppTheme.heading1),
                 const Spacer(),
                 FilledButton.icon(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const ReceiveShipmentScreen()),
-                  ),
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ReceiveShipmentScreen(),
+                      ),
+                    );
+
+                    if (result == true) {
+                      _loadShipments(); // Refresh after completing shipment
+                    }
+                  },
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Registrar Nueva Recepción'),
                   style: FilledButton.styleFrom(
@@ -46,137 +120,230 @@ class ShipmentHistoryScreen extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppTheme.spacingXL),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(AppTheme.spacingXL),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: StatusFilterChips(
+                                selectedStatus: _statusFilter,
+                                options: ShipmentStatusFilters.options,
+                                onStatusChanged: (status) {
+                                  setState(() {
+                                    _statusFilter = status;
+                                  });
+                                  _loadShipments();
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: AppTheme.spacingM),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppTheme.spacingM,
+                                vertical: AppTheme.spacingS,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.white,
+                                borderRadius: AppTheme.borderRadiusSmall,
+                                border: Border.all(color: AppTheme.lightGray),
+                              ),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    '${_shipments.length} recepciones',
+                                    style: AppTheme.bodyMedium,
+                                  ),
+                                  const SizedBox(width: AppTheme.spacingM),
+                                  const Icon(
+                                    Icons.filter_list_rounded,
+                                    color: AppTheme.mediumGray,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppTheme.spacingL),
+                        if (_shipments.isEmpty)
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(top: AppTheme.spacingXXL),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: 64,
+                                  color: AppTheme.lightGray,
+                                ),
+                                const SizedBox(height: AppTheme.spacingM),
+                                Text(
+                                  'No hay recepciones ${_statusFilter == 'all' ? '' : _getStatusFilterLabel()}',
+                                  style: AppTheme.bodyLarge.copyWith(
+                                    color: AppTheme.mediumGray,
+                                  ),
+                                ),
+                                const SizedBox(height: AppTheme.spacingS),
+                                Text(
+                                  _statusFilter == 'all'
+                                      ? 'Crea una nueva recepción para comenzar'
+                                      : 'Intenta con otro filtro',
+                                  style: AppTheme.bodySmall.copyWith(
+                                    color: AppTheme.lightGray,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          ..._shipments.map((shipment) {
+                            return Padding(
+                              padding: const EdgeInsets.only(
+                                  bottom: AppTheme.spacingM),
+                              child: _buildShipmentCard(shipment),
+                            );
+                          }),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getStatusFilterLabel() {
+    switch (_statusFilter) {
+      case 'completed':
+        return 'completadas';
+      case 'in-progress':
+        return 'en progreso';
+      case 'cancelled':
+        return 'canceladas';
+      default:
+        return '';
+    }
+  }
+
+  Widget _buildShipmentCard(Map<String, dynamic> shipment) {
+    final status = shipment['status'] as String;
+    final date = shipment['date'] as Timestamp?;
+    final totalProducts = shipment['totalProducts'] ?? 0;
+    final totalItems = shipment['totalItems'] ?? 0;
+    final receivedByName = shipment['receivedByName'] ?? 'Usuario';
+
+    final statusColor = StatusHelper.getShipmentStatusColor(status);
+    final statusLabel = StatusHelper.getShipmentStatusLabel(status);
+
+    final dateStr = DateFormatter.formatDate(date);
+    String timeStr = '';
+    if (date != null) {
+      final dt = date.toDate();
+      timeStr = '${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+    }
+
+    return InkWell(
+      onTap: () async {
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                ShipmentDetailScreen(shipmentId: shipment['id']),
+          ),
+        );
+
+        if (result == true) {
+          _loadShipments(); // Refresh if shipment was modified
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(AppTheme.spacingL),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          borderRadius: AppTheme.borderRadiusMedium,
+          boxShadow: AppTheme.cardShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.1),
+                borderRadius: AppTheme.borderRadiusSmall,
+              ),
+              child: Icon(
+                Icons.inventory_2_rounded,
+                color: statusColor,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: AppTheme.spacingL),
+            Expanded(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Expanded(child: _buildFilterDropdown('Este mes')),
+                      Text(
+                        '#${shipment['id'].substring(0, 8).toUpperCase()}',
+                        style: AppTheme.heading3,
+                      ),
                       const SizedBox(width: AppTheme.spacingM),
-                      Expanded(child: _buildFilterDropdown('Bodega Principal')),
-                      const SizedBox(width: AppTheme.spacingM),
-                      Expanded(child: _buildFilterDropdown('Todos')),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppTheme.spacingS,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          statusLabel,
+                          style: AppTheme.caption.copyWith(
+                            color: statusColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: AppTheme.spacingL),
-                  _buildShipmentCard(
-                    id: '#REC-142',
-                    date: '21 Oct 2025',
-                    time: '2:30 PM',
-                    location: 'Bodega Principal',
-                    products: 15,
-                    units: 230,
+                  const SizedBox(height: AppTheme.spacingS),
+                  Text(
+                    '$dateStr${timeStr.isNotEmpty ? ' • $timeStr' : ''}',
+                    style:
+                        AppTheme.bodySmall.copyWith(color: AppTheme.mediumGray),
                   ),
                   const SizedBox(height: AppTheme.spacingM),
-                  _buildShipmentCard(
-                    id: '#REC-141',
-                    date: '20 Oct 2025',
-                    time: '9:15 AM',
-                    location: 'Tienda Zona 10',
-                    products: 8,
-                    units: 95,
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.person_outline_rounded,
+                        size: 16,
+                        color: AppTheme.mediumGray,
+                      ),
+                      const SizedBox(width: AppTheme.spacingS),
+                      Text(receivedByName, style: AppTheme.bodyMedium),
+                      const SizedBox(width: AppTheme.spacingL),
+                      Text(
+                        '$totalProducts productos • $totalItems unidades',
+                        style: AppTheme.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterDropdown(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppTheme.spacingM, vertical: AppTheme.spacingS),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: AppTheme.borderRadiusSmall,
-        border: Border.all(color: AppTheme.lightGray),
-      ),
-      child: Row(
-        children: [
-          Text(label, style: AppTheme.bodyMedium),
-          const Spacer(),
-          const Icon(Icons.arrow_drop_down_rounded, color: AppTheme.mediumGray),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildShipmentCard({
-    required String id,
-    required String date,
-    required String time,
-    required String location,
-    required int products,
-    required int units,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.spacingL),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: AppTheme.borderRadiusMedium,
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: AppTheme.blue.withValues(alpha: 0.1),
-              borderRadius: AppTheme.borderRadiusSmall,
-            ),
-            child: const Icon(Icons.inventory_2_rounded,
-                color: AppTheme.blue, size: 28),
-          ),
-          const SizedBox(width: AppTheme.spacingL),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(id, style: AppTheme.heading3),
-                    const SizedBox(width: AppTheme.spacingM),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppTheme.spacingS, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.success.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'Completado',
-                        style: AppTheme.caption.copyWith(
-                            color: AppTheme.success,
-                            fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppTheme.spacingS),
-                Text('$date • $time', style: AppTheme.bodySmall),
-                const SizedBox(height: AppTheme.spacingM),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on_outlined,
-                        size: 16, color: AppTheme.mediumGray),
-                    const SizedBox(width: AppTheme.spacingS),
-                    Text(location, style: AppTheme.bodyMedium),
-                    const SizedBox(width: AppTheme.spacingL),
-                    Text('$products productos • $units unidades',
-                        style: AppTheme.bodyMedium
-                            .copyWith(fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.mediumGray),
-        ],
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.mediumGray),
+          ],
+        ),
       ),
     );
   }

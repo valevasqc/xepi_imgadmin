@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
+import 'package:xepi_imgadmin/services/auth_service.dart';
 import 'package:xepi_imgadmin/screens/dashboard_screen.dart';
 import 'package:xepi_imgadmin/screens/products_list_screen.dart';
 import 'package:xepi_imgadmin/screens/categories_list_screen.dart';
 import 'package:xepi_imgadmin/screens/finances_screen.dart';
 import 'package:xepi_imgadmin/screens/settings_screen.dart';
-import 'package:xepi_imgadmin/screens/future/orders_list_screen.dart';
+import 'package:xepi_imgadmin/screens/future/orders_history_screen.dart';
 import 'package:xepi_imgadmin/screens/future/shipment_history_screen.dart';
 import 'package:xepi_imgadmin/screens/future/movement_history_screen.dart';
-import 'package:xepi_imgadmin/screens/future/register_sale_screen.dart';
+import 'package:xepi_imgadmin/screens/future/sales_history_screen.dart';
+import 'package:xepi_imgadmin/screens/future/deposits_screen.dart';
 import 'package:xepi_imgadmin/screens/future/reports_screen.dart';
 
-/// Main layout with collapsible sidebar navigation
+/// Main layout with collapsible sidebar navigation with grouped dropdowns
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
 
@@ -21,84 +23,150 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   bool _isExpanded = true;
-  int _selectedIndex = 0;
+  String _selectedPageKey = 'dashboard';
+  final Map<String, bool> _expandedGroups = {
+    'catalog': true,
+    'inventory': false,
+    'operations': false,
+    'finance': false,
+  };
 
-  final List<NavigationItem> _navItems = [
-    // Phase 1 - Fully functional
-    NavigationItem(
-      icon: Icons.home_rounded,
+  // Navigation groups structure
+  final List<NavigationGroup> _navGroups = [
+    NavigationGroup(
       label: 'Inicio',
-      page: const DashboardScreen(),
-      isPhase2: false,
+      icon: Icons.home_rounded,
+      key: 'dashboard',
+      items: [
+        NavigationItem(
+          key: 'dashboard',
+          icon: Icons.home_rounded,
+          label: 'Inicio',
+          page: const DashboardScreen(),
+        ),
+      ],
+      isSingleItem: true,
     ),
-    NavigationItem(
-      icon: Icons.inventory_2_rounded,
-      label: 'Productos',
-      page: const ProductsListScreen(),
-      isPhase2: false,
+    NavigationGroup(
+      label: 'Catálogo',
+      icon: Icons.inventory_rounded,
+      key: 'catalog',
+      items: [
+        NavigationItem(
+          key: 'products',
+          icon: Icons.inventory_2_rounded,
+          label: 'Productos',
+          page: const ProductsListScreen(),
+        ),
+        NavigationItem(
+          key: 'categories',
+          icon: Icons.folder_rounded,
+          label: 'Categorías',
+          page: const CategoriesListScreen(),
+        ),
+      ],
     ),
-    NavigationItem(
-      icon: Icons.folder_rounded,
-      label: 'Categorías',
-      page: const CategoriesListScreen(),
-      isPhase2: false,
+    NavigationGroup(
+      label: 'Inventario',
+      icon: Icons.warehouse_rounded,
+      key: 'inventory',
+      items: [
+        NavigationItem(
+          key: 'shipments',
+          icon: Icons.local_shipping_rounded,
+          label: 'Recepciones',
+          page: const ShipmentHistoryScreen(),
+        ),
+        NavigationItem(
+          key: 'movements',
+          icon: Icons.swap_horiz_rounded,
+          label: 'Movimientos',
+          page: const MovementHistoryScreen(),
+        ),
+      ],
     ),
-
-    // Divider
-    NavigationItem(
-      icon: Icons.lock_outline_rounded,
-      label: 'PHASE 2 - UI ONLY',
-      page: const SizedBox.shrink(),
-      isDivider: true,
-      isPhase2: true,
+    NavigationGroup(
+      label: 'Ventas',
+      icon: Icons.store_rounded,
+      key: 'operations',
+      items: [
+        NavigationItem(
+          key: 'orders',
+          icon: Icons.receipt_long_rounded,
+          label: 'Envíos',
+          page: const OrdersHistoryScreen(),
+        ),
+        NavigationItem(
+          key: 'sales',
+          icon: Icons.point_of_sale_rounded,
+          label: 'Ventas',
+          page: const SalesHistoryScreen(),
+        ),
+      ],
     ),
-
-    // Phase 2 - UI only
-    NavigationItem(
-      icon: Icons.account_balance_wallet_rounded,
+    NavigationGroup(
       label: 'Finanzas',
-      page: const FinancesScreen(),
-      isPhase2: true,
+      icon: Icons.account_balance_wallet_rounded,
+      key: 'finance',
+      items: [
+        NavigationItem(
+          key: 'finances',
+          icon: Icons.account_balance_wallet_rounded,
+          label: 'Resumen',
+          page: const FinancesScreen(),
+        ),
+        NavigationItem(
+          key: 'deposits',
+          icon: Icons.account_balance_rounded,
+          label: 'Depósitos',
+          page: const DepositsScreen(),
+        ),
+        NavigationItem(
+          key: 'reports',
+          icon: Icons.assessment_rounded,
+          label: 'Reportes',
+          page: const ReportsScreen(),
+          isPhase2: true,
+        ),
+      ],
+      requiresSuperuser: true,
     ),
-    NavigationItem(
-      icon: Icons.receipt_long_rounded,
-      label: 'Pedidos',
-      page: const OrdersListScreen(),
-      isPhase2: true,
-    ),
-    NavigationItem(
-      icon: Icons.local_shipping_rounded,
-      label: 'Recepciones',
-      page: const ShipmentHistoryScreen(),
-      isPhase2: true,
-    ),
-    NavigationItem(
-      icon: Icons.swap_horiz_rounded,
-      label: 'Movimientos',
-      page: const MovementHistoryScreen(),
-      isPhase2: true,
-    ),
-    NavigationItem(
-      icon: Icons.point_of_sale_rounded,
-      label: 'Registrar Venta',
-      page: const RegisterSaleScreen(),
-      isPhase2: true,
-    ),
-    NavigationItem(
-      icon: Icons.assessment_rounded,
-      label: 'Reportes',
-      page: const ReportsScreen(),
-      isPhase2: true,
-    ),
-
-    // Settings at bottom
-    NavigationItem(
-      icon: Icons.settings_rounded,
+    NavigationGroup(
       label: 'Configuración',
-      page: const SettingsScreen(),
-      isPhase2: false,
+      icon: Icons.settings_rounded,
+      key: 'settings',
+      items: [
+        NavigationItem(
+          key: 'settings',
+          icon: Icons.settings_rounded,
+          label: 'Configuración',
+          page: const SettingsScreen(),
+        ),
+      ],
+      isSingleItem: true,
     ),
   ];
+
+  // Get visible groups based on user role
+  List<NavigationGroup> get _visibleNavGroups {
+    if (AuthService.isSuperuser) {
+      return _navGroups;
+    } else {
+      // Employee sees only Catalog group
+      return _navGroups.where((group) => !group.requiresSuperuser).toList();
+    }
+  }
+
+  Widget _getCurrentPage() {
+    for (var group in _navGroups) {
+      for (var item in group.items) {
+        if (item.key == _selectedPageKey) {
+          return item.page;
+        }
+      }
+    }
+    return const DashboardScreen();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -157,189 +225,252 @@ class _MainLayoutState extends State<MainLayout> {
 
                 const Divider(height: 1, color: AppTheme.lightGray),
 
-                // Navigation Items
+                // Navigation Groups
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppTheme.spacingS,
                       vertical: AppTheme.spacingM,
                     ),
-                    itemCount: _navItems.length,
+                    itemCount: _visibleNavGroups.length,
                     itemBuilder: (context, index) {
-                      final item = _navItems[index];
-                      final isSelected = _selectedIndex == index;
+                      final group = _visibleNavGroups[index];
+                      final isExpanded = _expandedGroups[group.key] ?? false;
 
-                      // Divider item
-                      if (item.isDivider) {
+                      // Single item groups (no dropdown)
+                      if (group.isSingleItem) {
+                        final item = group.items.first;
+                        final isSelected = _selectedPageKey == item.key;
+
                         return Padding(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: AppTheme.spacingM),
-                          child: _isExpanded
-                              ? Column(
+                          padding:
+                              const EdgeInsets.only(bottom: AppTheme.spacingS),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _selectedPageKey = item.key;
+                                });
+                              },
+                              borderRadius: AppTheme.borderRadiusSmall,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppTheme.spacingM,
+                                  vertical: AppTheme.spacingM,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppTheme.blue.withValues(alpha: 0.1)
+                                      : Colors.transparent,
+                                  borderRadius: AppTheme.borderRadiusSmall,
+                                ),
+                                child: Row(
                                   children: [
-                                    const Divider(color: AppTheme.lightGray),
-                                    const SizedBox(height: AppTheme.spacingS),
-                                    Row(
-                                      children: [
-                                        const SizedBox(
-                                            width: AppTheme.spacingM),
-                                        const Icon(Icons.lock_outline_rounded,
-                                            size: 14,
-                                            color: AppTheme.mediumGray),
-                                        const SizedBox(
-                                            width: AppTheme.spacingS),
-                                        Text(
-                                          'PHASE 2',
-                                          style: AppTheme.caption.copyWith(
-                                            color: AppTheme.mediumGray,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ],
+                                    Icon(
+                                      item.icon,
+                                      size: 20,
+                                      color: isSelected
+                                          ? AppTheme.blue
+                                          : AppTheme.mediumGray,
                                     ),
-                                    const SizedBox(height: AppTheme.spacingS),
+                                    if (_isExpanded) ...[
+                                      const SizedBox(width: AppTheme.spacingM),
+                                      Expanded(
+                                        child: Text(
+                                          item.label,
+                                          style: AppTheme.bodyMedium.copyWith(
+                                            color: isSelected
+                                                ? AppTheme.blue
+                                                : AppTheme.darkGray,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w600
+                                                : FontWeight.w400,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
                                   ],
-                                )
-                              : const Divider(color: AppTheme.lightGray),
+                                ),
+                              ),
+                            ),
+                          ),
                         );
                       }
 
-                      return Padding(
-                        padding:
-                            const EdgeInsets.only(bottom: AppTheme.spacingS),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                _selectedIndex = index;
-                              });
-
-                              // Show snackbar for Phase 2 items
-                              if (item.isPhase2) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Row(
-                                      children: [
-                                        const Icon(Icons.info_outline_rounded,
-                                            color: AppTheme.white),
+                      // Group with dropdown
+                      return Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(
+                                bottom: AppTheme.spacingXS),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _expandedGroups[group.key] = !isExpanded;
+                                  });
+                                },
+                                borderRadius: AppTheme.borderRadiusSmall,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppTheme.spacingM,
+                                    vertical: AppTheme.spacingM,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        group.icon,
+                                        size: 20,
+                                        color: AppTheme.mediumGray,
+                                      ),
+                                      if (_isExpanded) ...[
                                         const SizedBox(
                                             width: AppTheme.spacingM),
                                         Expanded(
                                           child: Text(
-                                            'Phase 2: Solo UI disponible. Funcionalidad próximamente.',
-                                            style: AppTheme.bodySmall.copyWith(
-                                                color: AppTheme.white),
+                                            group.label,
+                                            style: AppTheme.bodyMedium.copyWith(
+                                              color: AppTheme.darkGray,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
+                                        Icon(
+                                          isExpanded
+                                              ? Icons.expand_less_rounded
+                                              : Icons.expand_more_rounded,
+                                          size: 20,
+                                          color: AppTheme.mediumGray,
+                                        ),
                                       ],
-                                    ),
-                                    backgroundColor: AppTheme.blue,
-                                    behavior: SnackBarBehavior.floating,
-                                    duration: const Duration(seconds: 2),
+                                    ],
                                   ),
-                                );
-                              }
-                            },
-                            borderRadius: AppTheme.borderRadiusSmall,
-                            child: Container(
-                              height: 48,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: _isExpanded ? AppTheme.spacingM : 0,
+                                ),
                               ),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? (item.isPhase2
-                                        ? AppTheme.orange.withValues(alpha: 0.1)
-                                        : AppTheme.blue.withValues(alpha: 0.1))
-                                    : Colors.transparent,
-                                borderRadius: AppTheme.borderRadiusSmall,
-                              ),
-                              child: Row(
-                                children: [
-                                  if (!_isExpanded)
-                                    Expanded(
-                                      child: Stack(
-                                        alignment: Alignment.center,
+                            ),
+                          ),
+                          if (isExpanded && _isExpanded)
+                            ...group.items.map((item) {
+                              final isSelected = _selectedPageKey == item.key;
+
+                              return Padding(
+                                padding: const EdgeInsets.only(
+                                  left: AppTheme.spacingL,
+                                  bottom: AppTheme.spacingXS,
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedPageKey = item.key;
+                                      });
+
+                                      if (item.isPhase2) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Row(
+                                              children: [
+                                                const Icon(
+                                                    Icons.info_outline_rounded,
+                                                    color: AppTheme.white),
+                                                const SizedBox(
+                                                    width: AppTheme.spacingM),
+                                                Expanded(
+                                                  child: Text(
+                                                    'Funcionalidad en desarrollo - solo UI',
+                                                    style: AppTheme.bodySmall
+                                                        .copyWith(
+                                                            color:
+                                                                AppTheme.white),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            backgroundColor: AppTheme.blue,
+                                            behavior: SnackBarBehavior.floating,
+                                            duration:
+                                                const Duration(seconds: 2),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    borderRadius: AppTheme.borderRadiusSmall,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: AppTheme.spacingM,
+                                        vertical: AppTheme.spacingS,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? AppTheme.blue
+                                                .withValues(alpha: 0.1)
+                                            : Colors.transparent,
+                                        borderRadius:
+                                            AppTheme.borderRadiusSmall,
+                                      ),
+                                      child: Row(
                                         children: [
                                           Icon(
                                             item.icon,
+                                            size: 18,
                                             color: isSelected
-                                                ? (item.isPhase2
-                                                    ? AppTheme.orange
-                                                    : AppTheme.blue)
+                                                ? AppTheme.blue
                                                 : AppTheme.mediumGray,
-                                            size: 24,
+                                          ),
+                                          const SizedBox(
+                                              width: AppTheme.spacingM),
+                                          Expanded(
+                                            child: Text(
+                                              item.label,
+                                              style:
+                                                  AppTheme.bodyMedium.copyWith(
+                                                color: isSelected
+                                                    ? AppTheme.blue
+                                                    : AppTheme.darkGray,
+                                                fontWeight: isSelected
+                                                    ? FontWeight.w600
+                                                    : FontWeight.w400,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
                                           if (item.isPhase2)
-                                            Positioned(
-                                              top: 2,
-                                              right: 16,
-                                              child: Container(
-                                                width: 12,
-                                                height: 12,
-                                                decoration: const BoxDecoration(
-                                                  color: AppTheme.orange,
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: const Icon(
-                                                  Icons.lock_rounded,
-                                                  size: 8,
-                                                  color: AppTheme.white,
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.warning
+                                                    .withValues(alpha: 0.2),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'UI',
+                                                style:
+                                                    AppTheme.caption.copyWith(
+                                                  color: AppTheme.warning,
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w700,
                                                 ),
                                               ),
                                             ),
                                         ],
                                       ),
-                                    )
-                                  else ...[
-                                    Icon(
-                                      item.icon,
-                                      color: isSelected
-                                          ? (item.isPhase2
-                                              ? AppTheme.orange
-                                              : AppTheme.blue)
-                                          : AppTheme.mediumGray,
-                                      size: 24,
                                     ),
-                                    const SizedBox(width: AppTheme.spacingM),
-                                    Expanded(
-                                      child: Text(
-                                        item.label,
-                                        style: AppTheme.bodyMedium.copyWith(
-                                          color: isSelected
-                                              ? (item.isPhase2
-                                                  ? AppTheme.orange
-                                                  : AppTheme.blue)
-                                              : AppTheme.darkGray,
-                                          fontWeight: isSelected
-                                              ? FontWeight.w600
-                                              : FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                    if (item.isPhase2)
-                                      Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.orange
-                                              .withValues(alpha: 0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                        ),
-                                        child: const Icon(
-                                          Icons.lock_rounded,
-                                          size: 12,
-                                          color: AppTheme.orange,
-                                        ),
-                                      ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+                                  ),
+                                ),
+                              );
+                            }),
+                        ],
                       );
                     },
                   ),
@@ -370,9 +501,7 @@ class _MainLayoutState extends State<MainLayout> {
 
           // Main Content Area
           Expanded(
-            child: _navItems[_selectedIndex].isDivider
-                ? const DashboardScreen()
-                : _navItems[_selectedIndex].page,
+            child: _getCurrentPage(),
           ),
         ],
       ),
@@ -380,18 +509,36 @@ class _MainLayoutState extends State<MainLayout> {
   }
 }
 
+class NavigationGroup {
+  final String label;
+  final IconData icon;
+  final String key;
+  final List<NavigationItem> items;
+  final bool isSingleItem;
+  final bool requiresSuperuser;
+
+  NavigationGroup({
+    required this.label,
+    required this.icon,
+    required this.key,
+    required this.items,
+    this.isSingleItem = false,
+    this.requiresSuperuser = false,
+  });
+}
+
 class NavigationItem {
+  final String key;
   final IconData icon;
   final String label;
   final Widget page;
   final bool isPhase2;
-  final bool isDivider;
 
   NavigationItem({
+    required this.key,
     required this.icon,
     required this.label,
     required this.page,
     this.isPhase2 = false,
-    this.isDivider = false,
   });
 }

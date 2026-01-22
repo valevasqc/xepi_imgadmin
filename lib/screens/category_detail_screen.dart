@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'package:image_picker/image_picker.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
+import 'package:xepi_imgadmin/services/auth_service.dart';
 
 /// Category detail screen: manage cover image and reorder products
 class CategoryDetailScreen extends StatefulWidget {
@@ -361,13 +362,16 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                 ),
               ),
               const Spacer(),
-              OutlinedButton.icon(
-                onPressed: _editBulkPricing,
-                // TODO edit quantities too
-                icon: const Icon(Icons.local_offer_rounded, size: 18),
-                label: const Text('Precio por Mayor'),
-              ),
-              const SizedBox(width: AppTheme.spacingS),
+              // Bulk pricing button (SUPERUSER ONLY)
+              if (AuthService.isSuperuser) ...[
+                OutlinedButton.icon(
+                  onPressed: _editBulkPricing,
+                  // TODO edit quantities too
+                  icon: const Icon(Icons.local_offer_rounded, size: 18),
+                  label: const Text('Precio por Mayor'),
+                ),
+                const SizedBox(width: AppTheme.spacingS),
+              ],
               OutlinedButton.icon(
                 onPressed: _editCategoryInfo,
                 icon: const Icon(Icons.edit_rounded, size: 18),
@@ -487,7 +491,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                     }
                   }
                 },
-                activeColor: AppTheme.success,
+                activeThumbColor: AppTheme.success,
               ),
             ],
           ),
@@ -654,8 +658,9 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
   }
 
   Future<void> _editCategoryInfo() async {
-    final nameController =
-        TextEditingController(text: _categoryData!['name'] as String);
+    final nameController = TextEditingController(
+        text: _categoryData!['subcategoryName'] as String? ??
+            _categoryData!['name'] as String);
     final priceController = TextEditingController(
       text: (_categoryData!['defaultPrice'] ?? 0).toString(),
     );
@@ -683,16 +688,38 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                 ),
               ),
               const SizedBox(height: AppTheme.spacingM),
-              TextField(
-                controller: priceController,
-                decoration: const InputDecoration(
-                  labelText: 'Precio predeterminado',
-                  border: OutlineInputBorder(),
-                  prefixText: 'Q',
+              // Price field (SUPERUSER ONLY)
+              if (AuthService.isSuperuser)
+                TextField(
+                  controller: priceController,
+                  decoration: const InputDecoration(
+                    labelText: 'Precio predeterminado',
+                    border: OutlineInputBorder(),
+                    prefixText: 'Q',
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(AppTheme.spacingM),
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGray,
+                    borderRadius: AppTheme.borderRadiusSmall,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lock_outline_rounded,
+                          size: 18, color: AppTheme.mediumGray),
+                      const SizedBox(width: AppTheme.spacingS),
+                      Text(
+                        'Precio: Q${_categoryData!['defaultPrice'] ?? 0} (solo administrador)',
+                        style: AppTheme.bodySmall
+                            .copyWith(color: AppTheme.mediumGray),
+                      ),
+                    ],
+                  ),
                 ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-              ),
             ],
           ),
         ),
@@ -713,7 +740,9 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
 
     try {
       final newName = nameController.text.trim();
-      final newPrice = double.tryParse(priceController.text.trim()) ?? 0;
+      final newPrice = AuthService.isSuperuser
+          ? (double.tryParse(priceController.text.trim()) ?? 0)
+          : (_categoryData!['defaultPrice'] ?? 0);
 
       if (newName.isEmpty) {
         if (mounted) {
@@ -727,20 +756,49 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
         return;
       }
 
-      await _firestore
-          .collection('categories')
-          .doc(widget.parentId)
-          .collection('subcategories')
-          .doc(widget.categoryId)
-          .update({
-        'name': newName,
-        'defaultPrice': newPrice,
+      final updateData = {
+        'subcategoryName': newName,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // Only update price if superuser
+      if (AuthService.isSuperuser) {
+        updateData['defaultPrice'] = newPrice;
+      }
+
+      // Also update all products with this category
+      final productsSnapshot = await _firestore
+          .collection('products')
+          .where('categoryCode', isEqualTo: _categoryData!['code'])
+          .get();
+
+      final batch = _firestore.batch();
+
+      for (var doc in productsSnapshot.docs) {
+        batch.update(doc.reference, {
+          'subcategory': newName,
+          'categoryName': newName,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // Update subcategory
+      batch.update(
+        _firestore
+            .collection('categories')
+            .doc(widget.parentId)
+            .collection('subcategories')
+            .doc(widget.categoryId),
+        updateData,
+      );
+
+      await batch.commit();
 
       setState(() {
-        _categoryData!['name'] = newName;
-        _categoryData!['defaultPrice'] = newPrice;
+        _categoryData!['subcategoryName'] = newName;
+        if (AuthService.isSuperuser) {
+          _categoryData!['defaultPrice'] = newPrice;
+        }
       });
 
       if (mounted) {
@@ -916,6 +974,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
             ),
           ),
           const SizedBox(height: AppTheme.spacingS),
+          // TODO take me to product detail screen when clicking on a product
           Text(
             'Arrastra para reordenar cómo aparecen en el sitio',
             style: AppTheme.bodySmall.copyWith(

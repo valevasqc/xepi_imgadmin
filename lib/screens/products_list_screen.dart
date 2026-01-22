@@ -71,18 +71,36 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
 
   Future<void> _loadCategories() async {
     try {
-      final snapshot = await _firestore.collection('categories').get();
-      setState(() {
-        _categoriesCache = {for (var doc in snapshot.docs) doc.id: doc.data()};
+      // Load primary categories
+      final primarySnapshot = await _firestore.collection('categories').get();
 
-        // Extract unique primary categories
-        final primarySet = <String>{};
-        for (var category in _categoriesCache.values) {
-          final primary = category['primaryCategory'];
-          if (primary != null) {
-            primarySet.add(primary);
-          }
+      final primarySet = <String>{};
+      final Map<String, Map<String, dynamic>> categoriesMap = {};
+
+      // For each primary category, load its subcategories
+      for (var primaryDoc in primarySnapshot.docs) {
+        final primaryName = primaryDoc.id;
+        primarySet.add(primaryName);
+
+        // Load subcategories from subcollection
+        final subSnapshot =
+            await primaryDoc.reference.collection('subcategories').get();
+
+        for (var subDoc in subSnapshot.docs) {
+          final subData = subDoc.data();
+          final code = subData['code'] as String;
+
+          categoriesMap[code] = {
+            'primaryCategory': primaryName,
+            'subcategoryName': subData['subcategoryName'],
+            'defaultPrice': subData['defaultPrice'],
+            ...subData,
+          };
         }
+      }
+
+      setState(() {
+        _categoriesCache = categoriesMap;
         _primaryCategories = primarySet.toList()..sort();
       });
     } catch (e) {
@@ -1338,6 +1356,8 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
           .orderBy('warehouseCode')
           .get();
 
+      if (!mounted) return;
+
       setState(() {
         _allLoadedProducts = snapshot.docs
             .map((doc) => {
@@ -1467,10 +1487,10 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
 
       // Search filter (client-side - check barcode, name, warehouse code)
       if (_searchQuery.isNotEmpty) {
-        final query = _searchQuery.toLowerCase();
-        final barcode = (product['barcode'] ?? '').toString().toLowerCase();
-        final name = (product['nombre'] ?? '').toString().toLowerCase();
-        final code = (product['warehouseCode'] ?? '').toString().toLowerCase();
+        final query = _normalizeString(_searchQuery);
+        final barcode = _normalizeString(product['barcode'] ?? '');
+        final name = _normalizeString(product['name'] ?? '');
+        final code = _normalizeString(product['warehouseCode'] ?? '');
 
         if (!barcode.contains(query) &&
             !name.contains(query) &&
@@ -1567,5 +1587,18 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
         ),
       ],
     );
+  }
+
+  /// Normalize string for search: lowercase + remove accents
+  String _normalizeString(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u')
+        .replaceAll('ñ', 'n')
+        .replaceAll('ü', 'u');
   }
 }

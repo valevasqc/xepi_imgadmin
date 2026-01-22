@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
 import 'firebase_options.dart';
 import 'config/app_theme.dart';
 import 'screens/admin_login.dart';
 import 'screens/main_layout.dart';
-// DEPRECATED: Old admin dashboard - keeping for reference
-// import 'screens/admin_dashboard.dart' as legacy;
+// Legacy dashboard deployed separately
+// import 'screens/admin_dashboard_legacy.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

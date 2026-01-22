@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
+import 'package:xepi_imgadmin/services/expenses_service.dart';
+import 'package:xepi_imgadmin/services/auth_service.dart';
 
 class FinancesScreen extends StatefulWidget {
   const FinancesScreen({super.key});
@@ -9,19 +12,103 @@ class FinancesScreen extends StatefulWidget {
 }
 
 class _FinancesScreenState extends State<FinancesScreen> {
-  // Mock data for pending cash
-  final double _storeCash = 850.0;
-  final int _storeDays = 7;
-  final double _mensajeroCash = 1600.0;
-  final int _mensajeroDays = 3;
-  final double _forzaCash = 420.0;
-  final int _forzaDays = 2;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  double get _totalPending => _storeCash + _mensajeroCash + _forzaCash;
-  bool get _isOverLimit => _totalPending > 2000;
+  // Real data from Firestore
+  List<Map<String, dynamic>> _sales = [];
+  List<Map<String, dynamic>> _expenses = [];
+  List<Map<String, dynamic>> _deposits = [];
+  List<Map<String, dynamic>> _categories = [];
+  bool _loading = true;
+
+  double _totalSales = 0;
+  double _totalExpenses = 0;
+  double _pendingCash = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _loading = true);
+    try {
+      // Load sales, expenses, deposits, and categories in parallel
+      final results = await Future.wait([
+        _firestore
+            .collection('sales')
+            .orderBy('createdAt', descending: true)
+            .limit(50)
+            .get(),
+        ExpensesService.fetchExpenses(),
+        _firestore
+            .collection('deposits')
+            .orderBy('createdAt', descending: true)
+            .limit(20)
+            .get(),
+        ExpensesService.fetchCategories(),
+      ]);
+
+      final salesSnapshot = results[0] as QuerySnapshot;
+      final depositsSnapshot = results[2] as QuerySnapshot;
+
+      setState(() {
+        _sales = salesSnapshot.docs
+            .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+            .toList();
+        _expenses = results[1] as List<Map<String, dynamic>>;
+        _deposits = depositsSnapshot.docs
+            .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+            .toList();
+        _categories = results[3] as List<Map<String, dynamic>>;
+
+        // Calculate totals
+        _totalSales = _sales.fold<double>(
+            0, (sum, s) => sum + ((s['total'] as num?)?.toDouble() ?? 0));
+        _totalExpenses = _expenses.fold<double>(
+            0, (sum, e) => sum + ((e['amount'] as num?)?.toDouble() ?? 0));
+
+        // Calculate pending cash (efectivo sales without depositId)
+        _pendingCash = _sales
+            .where((s) =>
+                s['paymentMethod'] == 'efectivo' && s['depositId'] == null)
+            .fold<double>(
+                0, (sum, s) => sum + ((s['total'] as num?)?.toDouble() ?? 0));
+
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: AppTheme.white),
+                const SizedBox(width: AppTheme.spacingM),
+                Expanded(
+                    child: Text('Error cargando datos: $e',
+                        style: AppTheme.bodySmall
+                            .copyWith(color: AppTheme.white))),
+              ],
+            ),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: AppTheme.backgroundGray,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundGray,
       body: Column(
@@ -58,44 +145,37 @@ class _FinancesScreenState extends State<FinancesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // CASH FLOW OVERVIEW
-                  _buildCashFlowOverview(),
+                  // Sales & Expenses Summary
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildSalesSummary()),
+                      const SizedBox(width: AppTheme.spacingL),
+                      Expanded(child: _buildExpensesSummary()),
+                    ],
+                  ),
 
                   const SizedBox(height: AppTheme.spacingXL),
 
-                  // DEPOSIT MANAGEMENT + PAYMENT ANALYSIS
+                  // Recent Sales & Deposits
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        flex: 3,
-                        child: _buildDepositManagement(),
+                        flex: 2,
+                        child: _buildRecentSales(),
                       ),
                       const SizedBox(width: AppTheme.spacingL),
                       Expanded(
-                        flex: 2,
-                        child: _buildPaymentMethodAnalysis(),
+                        child: _buildRecentDepositsWidget(),
                       ),
                     ],
                   ),
 
                   const SizedBox(height: AppTheme.spacingXL),
 
-                  // EXPENSE TRACKING + PROFIT/LOSS
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: _buildExpenseTracking(),
-                      ),
-                      const SizedBox(width: AppTheme.spacingL),
-                      Expanded(
-                        flex: 2,
-                        child: _buildProfitLossSummary(),
-                      ),
-                    ],
-                  ),
+                  // Expenses List
+                  _buildExpensesTable(),
                 ],
               ),
             ),
@@ -105,218 +185,232 @@ class _FinancesScreenState extends State<FinancesScreen> {
     );
   }
 
-  // ========== CASH FLOW OVERVIEW ==========
-  Widget _buildCashFlowOverview() {
+  // ========== SALES SUMMARY ==========
+  Widget _buildSalesSummary() {
+    final profit = _totalSales - _totalExpenses;
+
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingL),
       decoration: BoxDecoration(
         color: AppTheme.white,
         borderRadius: AppTheme.borderRadiusMedium,
         boxShadow: AppTheme.cardShadow,
-        border:
-            _isOverLimit ? Border.all(color: AppTheme.danger, width: 2) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                _isOverLimit
-                    ? Icons.warning_rounded
-                    : Icons.trending_up_rounded,
-                color: _isOverLimit ? AppTheme.danger : AppTheme.success,
-                size: 28,
-              ),
+              const Icon(Icons.trending_up_rounded,
+                  color: AppTheme.success, size: 28),
               const SizedBox(width: AppTheme.spacingM),
-              Text('Resumen de Efectivo', style: AppTheme.heading2),
+              Text('Ventas', style: AppTheme.heading2),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacingL),
+          _buildStatRow('Total Ventas', _totalSales, AppTheme.success),
+          const SizedBox(height: AppTheme.spacingM),
+          _buildStatRow('Efectivo Pendiente', _pendingCash,
+              _pendingCash > 2000 ? AppTheme.danger : AppTheme.warning),
+          const Divider(height: AppTheme.spacingXL),
+          _buildStatRow('Ganancia Estimada', profit, AppTheme.blue),
+          const SizedBox(height: AppTheme.spacingS),
+          Text(
+            'Ventas - Gastos (sin COGS)',
+            style: AppTheme.caption.copyWith(color: AppTheme.mediumGray),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, double value, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: AppTheme.bodyMedium),
+        Text('Q${value.toStringAsFixed(2)}',
+            style: AppTheme.heading3.copyWith(color: color)),
+      ],
+    );
+  }
+
+  // ========== EXPENSES SUMMARY ==========
+  Widget _buildExpensesSummary() {
+    final operationalExpenses = _expenses
+        .where((e) => e['categoryType'] == 'operativo')
+        .fold<double>(
+            0, (sum, e) => sum + ((e['amount'] as num?)?.toDouble() ?? 0));
+    final nonOperationalExpenses = _expenses
+        .where((e) => e['categoryType'] == 'no_operativo')
+        .fold<double>(
+            0, (sum, e) => sum + ((e['amount'] as num?)?.toDouble() ?? 0));
+
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spacingL),
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: AppTheme.borderRadiusMedium,
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.receipt_long_rounded,
+                  color: AppTheme.danger, size: 28),
+              const SizedBox(width: AppTheme.spacingM),
+              Text('Gastos', style: AppTheme.heading2),
               const Spacer(),
               FilledButton.icon(
-                onPressed: () => _showRecordDepositDialog(),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Registrar Depósito'),
+                onPressed: () => _showAddExpenseDialog(),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Agregar'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.blue,
+                  backgroundColor: AppTheme.danger,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.spacingM,
+                      vertical: AppTheme.spacingS),
                 ),
               ),
             ],
           ),
           const SizedBox(height: AppTheme.spacingL),
-
-          // Pending Cash Alert
-          if (_isOverLimit)
-            Container(
-              margin: const EdgeInsets.only(bottom: AppTheme.spacingL),
-              padding: const EdgeInsets.all(AppTheme.spacingM),
-              decoration: BoxDecoration(
-                color: AppTheme.danger.withValues(alpha: 0.1),
-                borderRadius: AppTheme.borderRadiusSmall,
-                border: Border.all(color: AppTheme.danger),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline_rounded,
-                      color: AppTheme.danger),
-                  const SizedBox(width: AppTheme.spacingM),
-                  Expanded(
-                    child: Text(
-                      '⚠️ Efectivo pendiente excede Q2,000. Se recomienda realizar depósito.',
-                      style: AppTheme.bodyMedium.copyWith(
-                        color: AppTheme.danger,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Pending Cash Cards
-          Row(
-            children: [
-              Expanded(
-                child: _buildPendingCashCard(
-                  'Caja Tienda',
-                  _storeCash,
-                  _storeDays,
-                  Icons.store_rounded,
-                  AppTheme.blue,
-                ),
-              ),
-              const SizedBox(width: AppTheme.spacingM),
-              Expanded(
-                child: _buildPendingCashCard(
-                  'Mensajero',
-                  _mensajeroCash,
-                  _mensajeroDays,
-                  Icons.delivery_dining_rounded,
-                  AppTheme.orange,
-                ),
-              ),
-              const SizedBox(width: AppTheme.spacingM),
-              Expanded(
-                child: _buildPendingCashCard(
-                  'Forza',
-                  _forzaCash,
-                  _forzaDays,
-                  Icons.moped_rounded,
-                  AppTheme.yellow,
-                ),
-              ),
-            ],
-          ),
-
-          const Divider(height: AppTheme.spacingXL * 2),
-
-          // Quick Stats Row
-          Row(
-            children: [
-              Expanded(
-                child: _buildQuickStat(
-                  'Total Pendiente',
-                  'Q${_totalPending.toStringAsFixed(2)}',
-                  _isOverLimit ? AppTheme.danger : AppTheme.darkGray,
-                  Icons.account_balance_wallet_rounded,
-                ),
-              ),
-              const SizedBox(width: AppTheme.spacingL),
-              Expanded(
-                child: _buildQuickStat(
-                  'Cobros Hoy',
-                  'Q1,245',
-                  AppTheme.success,
-                  Icons.payments_rounded,
-                ),
-              ),
-              const SizedBox(width: AppTheme.spacingL),
-              Expanded(
-                child: _buildQuickStat(
-                  'Depósitos Esta Semana',
-                  'Q8,450',
-                  AppTheme.blue,
-                  Icons.account_balance_rounded,
-                ),
-              ),
-            ],
-          ),
+          _buildStatRow(
+              'Gastos Operativos', operationalExpenses, AppTheme.orange),
+          const SizedBox(height: AppTheme.spacingM),
+          _buildStatRow(
+              'Gastos No Operativos', nonOperationalExpenses, AppTheme.danger),
+          const Divider(height: AppTheme.spacingXL),
+          _buildStatRow('Total Gastos', _totalExpenses, AppTheme.danger),
         ],
       ),
     );
   }
 
-  Widget _buildPendingCashCard(
-      String label, double amount, int days, IconData icon, Color color) {
+  // ========== RECENT SALES ==========
+  Widget _buildRecentSales() {
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingL),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.05),
-        borderRadius: AppTheme.borderRadiusSmall,
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        color: AppTheme.white,
+        borderRadius: AppTheme.borderRadiusMedium,
+        boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(width: AppTheme.spacingS),
-              Text(
-                label,
-                style: AppTheme.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
+              const Icon(Icons.point_of_sale_rounded,
+                  color: AppTheme.blue, size: 24),
+              const SizedBox(width: AppTheme.spacingM),
+              Text('Ventas Recientes', style: AppTheme.heading3),
             ],
           ),
-          const SizedBox(height: AppTheme.spacingM),
-          Text(
-            'Q${amount.toStringAsFixed(2)}',
-            style: AppTheme.heading2.copyWith(color: color),
-          ),
-          const SizedBox(height: AppTheme.spacingS),
-          Text(
-            '$days días sin depositar',
-            style: AppTheme.bodySmall.copyWith(
-              color: days > 5 ? AppTheme.danger : AppTheme.mediumGray,
-            ),
-          ),
+          const SizedBox(height: AppTheme.spacingL),
+          ..._sales
+              .take(5)
+              .map((sale) => Container(
+                    margin: const EdgeInsets.only(bottom: AppTheme.spacingM),
+                    padding: const EdgeInsets.all(AppTheme.spacingM),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundGray,
+                      borderRadius: AppTheme.borderRadiusSmall,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppTheme.spacingS),
+                          decoration: BoxDecoration(
+                            color: AppTheme.success.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.shopping_bag_rounded,
+                              color: AppTheme.success, size: 20),
+                        ),
+                        const SizedBox(width: AppTheme.spacingM),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                      sale['saleType'] == 'kiosko'
+                                          ? 'Tienda'
+                                          : 'Delivery',
+                                      style: AppTheme.bodyMedium.copyWith(
+                                          fontWeight: FontWeight.w600)),
+                                  const SizedBox(width: AppTheme.spacingS),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: AppTheme.spacingS,
+                                        vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: _getPaymentColor(
+                                              sale['paymentMethod'])
+                                          .withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      sale['paymentMethod'] ?? '',
+                                      style: AppTheme.caption.copyWith(
+                                        color: _getPaymentColor(
+                                            sale['paymentMethod']),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(_formatTimestamp(sale['createdAt']),
+                                  style: AppTheme.bodySmall
+                                      .copyWith(color: AppTheme.mediumGray)),
+                            ],
+                          ),
+                        ),
+                        Text(
+                            'Q${((sale['total'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
+                            style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.success)),
+                      ],
+                    ),
+                  ))
+              ,
         ],
       ),
     );
   }
 
-  Widget _buildQuickStat(
-      String label, String value, Color color, IconData icon) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(AppTheme.spacingM),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: AppTheme.borderRadiusSmall,
-          ),
-          child: Icon(icon, color: color, size: 24),
-        ),
-        const SizedBox(width: AppTheme.spacingM),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style:
-                      AppTheme.bodySmall.copyWith(color: AppTheme.mediumGray)),
-              const SizedBox(height: 4),
-              Text(value, style: AppTheme.heading3.copyWith(color: color)),
-            ],
-          ),
-        ),
-      ],
-    );
+  Color _getPaymentColor(String? method) {
+    switch (method) {
+      case 'efectivo':
+        return AppTheme.success;
+      case 'transferencia':
+        return AppTheme.blue;
+      case 'tarjeta':
+        return AppTheme.orange;
+      default:
+        return AppTheme.mediumGray;
+    }
   }
 
-  // ========== DEPOSIT MANAGEMENT ==========
-  Widget _buildDepositManagement() {
+  String _formatTimestamp(dynamic ts) {
+    if (ts == null) return '';
+    try {
+      final date = (ts as Timestamp).toDate();
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // ========== RECENT DEPOSITS ==========
+  Widget _buildRecentDepositsWidget() {
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingL),
       decoration: BoxDecoration(
@@ -332,414 +426,61 @@ class _FinancesScreenState extends State<FinancesScreen> {
               const Icon(Icons.account_balance_rounded,
                   color: AppTheme.blue, size: 24),
               const SizedBox(width: AppTheme.spacingM),
-              Text('Depósitos Recientes', style: AppTheme.heading3),
+              Text('Depósitos', style: AppTheme.heading3),
             ],
           ),
           const SizedBox(height: AppTheme.spacingL),
-
-          // Recent Deposits List
-          ..._buildRecentDeposits(),
-
-          const SizedBox(height: AppTheme.spacingL),
-          TextButton.icon(
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('Ver historial completo - próximamente')),
-            ),
-            icon: const Icon(Icons.history_rounded),
-            label: const Text('Ver Historial Completo'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildRecentDeposits() {
-    final deposits = [
-      {
-        'date': '23 Oct 2025',
-        'source': 'Caja Tienda',
-        'amount': 1500.0,
-        'bank': 'BAM'
-      },
-      {
-        'date': '21 Oct 2025',
-        'source': 'Mensajero',
-        'amount': 2300.0,
-        'bank': 'Banrural'
-      },
-      {
-        'date': '20 Oct 2025',
-        'source': 'Forza',
-        'amount': 680.0,
-        'bank': 'BAM'
-      },
-      {
-        'date': '18 Oct 2025',
-        'source': 'Caja Tienda',
-        'amount': 1850.0,
-        'bank': 'G&T'
-      },
-      {
-        'date': '17 Oct 2025',
-        'source': 'Mensajero',
-        'amount': 1920.0,
-        'bank': 'Banrural'
-      },
-    ];
-
-    return deposits.map((deposit) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: AppTheme.spacingM),
-        padding: const EdgeInsets.all(AppTheme.spacingM),
-        decoration: BoxDecoration(
-          color: AppTheme.backgroundGray,
-          borderRadius: AppTheme.borderRadiusSmall,
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(AppTheme.spacingS),
-              decoration: BoxDecoration(
-                color: AppTheme.success.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.check_circle_rounded,
-                  color: AppTheme.success, size: 20),
-            ),
-            const SizedBox(width: AppTheme.spacingM),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        deposit['source'] as String,
-                        style: AppTheme.bodyMedium
-                            .copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: AppTheme.spacingS),
-                      Text('→', style: AppTheme.bodySmall),
-                      const SizedBox(width: AppTheme.spacingS),
-                      Text(
-                        deposit['bank'] as String,
-                        style: AppTheme.bodySmall
-                            .copyWith(color: AppTheme.mediumGray),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    deposit['date'] as String,
-                    style:
-                        AppTheme.bodySmall.copyWith(color: AppTheme.mediumGray),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              'Q${(deposit['amount'] as double).toStringAsFixed(2)}',
-              style: AppTheme.bodyMedium.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppTheme.success,
-              ),
-            ),
-            const SizedBox(width: AppTheme.spacingM),
-            IconButton(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Ver boleta - próximamente')),
-              ),
-              icon: const Icon(Icons.receipt_long_rounded, size: 20),
-              tooltip: 'Ver boleta',
-            ),
-          ],
-        ),
-      );
-    }).toList();
-  }
-
-  // ========== PAYMENT METHOD ANALYSIS ==========
-  Widget _buildPaymentMethodAnalysis() {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.spacingL),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: AppTheme.borderRadiusMedium,
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.pie_chart_rounded,
-                  color: AppTheme.orange, size: 24),
-              const SizedBox(width: AppTheme.spacingM),
-              Text('Análisis de Pagos', style: AppTheme.heading3),
-            ],
-          ),
-          const SizedBox(height: AppTheme.spacingL),
-
-          // Store Payment Methods
-          Text('Tienda:',
-              style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: AppTheme.spacingS),
-          _buildPaymentBar('Tarjeta', 65, AppTheme.blue),
-          const SizedBox(height: AppTheme.spacingS),
-          _buildPaymentBar('Efectivo', 35, AppTheme.success),
-
-          const Divider(height: AppTheme.spacingXL),
-
-          // Delivery Payment Methods
-          Text('Entregas:',
-              style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: AppTheme.spacingS),
-          _buildPaymentBar('Pre-pagado', 72, AppTheme.orange),
-          const SizedBox(height: AppTheme.spacingS),
-          _buildPaymentBar('Contra Entrega', 28, AppTheme.yellow),
-
-          const Divider(height: AppTheme.spacingXL),
-
-          // Sales Channels
-          Text('Canales de Venta:',
-              style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: AppTheme.spacingS),
-          _buildPaymentBar('Tienda', 65, AppTheme.blue),
-          const SizedBox(height: AppTheme.spacingS),
-          _buildPaymentBar('WhatsApp', 25, AppTheme.success),
-          const SizedBox(height: AppTheme.spacingS),
-          _buildPaymentBar('Facebook', 10, AppTheme.orange),
-
-          const SizedBox(height: AppTheme.spacingL),
-
-          // Placeholder for pie chart
-          Container(
-            height: 200,
-            decoration: BoxDecoration(
-              color: AppTheme.backgroundGray,
-              borderRadius: AppTheme.borderRadiusSmall,
-            ),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.pie_chart_outline_rounded,
-                      size: 48, color: AppTheme.mediumGray),
-                  const SizedBox(height: AppTheme.spacingM),
-                  Text(
-                    'Gráfica circular',
-                    style: AppTheme.bodyMedium
-                        .copyWith(color: AppTheme.mediumGray),
-                  ),
-                  Text(
-                    'próximamente',
-                    style:
-                        AppTheme.bodySmall.copyWith(color: AppTheme.mediumGray),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPaymentBar(String label, int percentage, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: AppTheme.bodySmall),
-            Text('$percentage%',
-                style:
-                    AppTheme.bodySmall.copyWith(fontWeight: FontWeight.w600)),
-          ],
-        ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: percentage / 100,
-            backgroundColor: AppTheme.lightGray,
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-            minHeight: 8,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ========== EXPENSE TRACKING ==========
-  Widget _buildExpenseTracking() {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.spacingL),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: AppTheme.borderRadiusMedium,
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.receipt_rounded,
-                  color: AppTheme.danger, size: 24),
-              const SizedBox(width: AppTheme.spacingM),
-              Text('Gastos', style: AppTheme.heading3),
-              const Spacer(),
-              OutlinedButton.icon(
-                onPressed: () => _showRecordExpenseDialog(),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Registrar Gasto'),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppTheme.spacingL),
-
-          // Recent Expenses
-          ..._buildRecentExpenses(),
-
-          const SizedBox(height: AppTheme.spacingL),
-          TextButton.icon(
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('Ver todos los gastos - próximamente')),
-            ),
-            icon: const Icon(Icons.list_rounded),
-            label: const Text('Ver Todos los Gastos'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildRecentExpenses() {
-    final expenses = [
-      {
-        'date': '23 Oct',
-        'category': 'Proveedor',
-        'description': 'Compra inventario',
-        'amount': 4500.0
-      },
-      {
-        'date': '20 Oct',
-        'category': 'Salarios',
-        'description': 'Pago quincenal',
-        'amount': 6800.0
-      },
-      {
-        'date': '15 Oct',
-        'category': 'Alquiler',
-        'description': 'Renta local',
-        'amount': 3500.0
-      },
-      {
-        'date': '12 Oct',
-        'category': 'Servicios',
-        'description': 'Luz y agua',
-        'amount': 850.0
-      },
-      {
-        'date': '10 Oct',
-        'category': 'Marketing',
-        'description': 'Anuncios Facebook',
-        'amount': 500.0
-      },
-    ];
-
-    return expenses.map((expense) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: AppTheme.spacingM),
-        padding: const EdgeInsets.all(AppTheme.spacingM),
-        decoration: BoxDecoration(
-          color: AppTheme.backgroundGray,
-          borderRadius: AppTheme.borderRadiusSmall,
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(AppTheme.spacingS),
-              decoration: BoxDecoration(
-                color: AppTheme.danger.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.trending_down_rounded,
-                  color: AppTheme.danger, size: 20),
-            ),
-            const SizedBox(width: AppTheme.spacingM),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppTheme.spacingS,
-                          vertical: 2,
+          ..._deposits
+              .take(5)
+              .map((deposit) => Container(
+                    margin: const EdgeInsets.only(bottom: AppTheme.spacingM),
+                    padding: const EdgeInsets.all(AppTheme.spacingM),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundGray,
+                      borderRadius: AppTheme.borderRadiusSmall,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppTheme.spacingS),
+                          decoration: BoxDecoration(
+                            color: AppTheme.blue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.account_balance_rounded,
+                              color: AppTheme.blue, size: 20),
                         ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.blue.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          expense['category'] as String,
-                          style: AppTheme.caption.copyWith(
-                            color: AppTheme.blue,
-                            fontWeight: FontWeight.w600,
+                        const SizedBox(width: AppTheme.spacingM),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(deposit['source'] ?? 'N/A',
+                                  style: AppTheme.bodyMedium
+                                      .copyWith(fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 4),
+                              Text(_formatTimestamp(deposit['createdAt']),
+                                  style: AppTheme.bodySmall
+                                      .copyWith(color: AppTheme.mediumGray)),
+                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(width: AppTheme.spacingS),
-                      Text(
-                        expense['date'] as String,
-                        style: AppTheme.bodySmall
-                            .copyWith(color: AppTheme.mediumGray),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    expense['description'] as String,
-                    style: AppTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              'Q${(expense['amount'] as double).toStringAsFixed(2)}',
-              style: AppTheme.bodyMedium.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppTheme.danger,
-              ),
-            ),
-            const SizedBox(width: AppTheme.spacingM),
-            IconButton(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Ver recibo - próximamente')),
-              ),
-              icon: const Icon(Icons.receipt_long_rounded, size: 20),
-              tooltip: 'Ver recibo',
-            ),
-          ],
-        ),
-      );
-    }).toList();
+                        Text(
+                            'Q${((deposit['amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
+                            style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.blue)),
+                      ],
+                    ),
+                  ))
+              ,
+        ],
+      ),
+    );
   }
 
-  // ========== PROFIT/LOSS SUMMARY ==========
-  Widget _buildProfitLossSummary() {
-    const revenue = 45680.0;
-    const expenses = 28350.0;
-    const profit = revenue - expenses;
-    const margin = (profit / revenue * 100);
-    const lastMonthProfit = 15200.0;
-    const growth = ((profit - lastMonthProfit) / lastMonthProfit * 100);
-
+  // ========== EXPENSES TABLE ==========
+  Widget _buildExpensesTable() {
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingL),
       decoration: BoxDecoration(
@@ -752,308 +493,385 @@ class _FinancesScreenState extends State<FinancesScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.trending_up_rounded,
-                  color: AppTheme.success, size: 24),
-              const SizedBox(width: AppTheme.spacingM),
-              Text('Ganancias', style: AppTheme.heading3),
+              Text('Detalle de Gastos', style: AppTheme.heading3),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => _showCategoryManagementDialog(),
+                icon: const Icon(Icons.settings_rounded, size: 18),
+                label: const Text('Gestionar Categorías'),
+              ),
             ],
           ),
           const SizedBox(height: AppTheme.spacingL),
-
-          Text(
-            'Este Mes',
-            style: AppTheme.bodySmall.copyWith(color: AppTheme.mediumGray),
-          ),
-          const SizedBox(height: AppTheme.spacingL),
-
-          // Total Revenue
-          _buildFinancialRow(
-            'Ingresos Totales',
-            revenue,
-            AppTheme.blue,
-            Icons.arrow_upward_rounded,
-          ),
-          const SizedBox(height: AppTheme.spacingL),
-
-          // Total Expenses
-          _buildFinancialRow(
-            'Gastos Totales',
-            expenses,
-            AppTheme.danger,
-            Icons.arrow_downward_rounded,
-          ),
-
-          const Divider(height: AppTheme.spacingXL),
-
-          // Net Profit
-          Container(
-            padding: const EdgeInsets.all(AppTheme.spacingL),
-            decoration: BoxDecoration(
-              color: AppTheme.success.withValues(alpha: 0.1),
-              borderRadius: AppTheme.borderRadiusSmall,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Ganancia Neta',
-                  style: AppTheme.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.success,
-                  ),
-                ),
-                const SizedBox(height: AppTheme.spacingS),
-                Text(
-                  'Q${profit.toStringAsFixed(2)}',
-                  style: AppTheme.heading1.copyWith(color: AppTheme.success),
-                ),
-                const SizedBox(height: AppTheme.spacingS),
-                Text(
-                  'Margen: ${margin.toStringAsFixed(1)}%',
-                  style: AppTheme.bodySmall.copyWith(color: AppTheme.success),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: AppTheme.spacingL),
-
-          // Comparison to last month
-          Container(
-            padding: const EdgeInsets.all(AppTheme.spacingM),
-            decoration: BoxDecoration(
-              color: growth > 0
-                  ? AppTheme.success.withValues(alpha: 0.05)
-                  : AppTheme.danger.withValues(alpha: 0.05),
-              borderRadius: AppTheme.borderRadiusSmall,
-              border: Border.all(
-                color: growth > 0
-                    ? AppTheme.success.withValues(alpha: 0.3)
-                    : AppTheme.danger.withValues(alpha: 0.3),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  growth > 0
-                      ? Icons.trending_up_rounded
-                      : Icons.trending_down_rounded,
-                  color: growth > 0 ? AppTheme.success : AppTheme.danger,
-                  size: 20,
-                ),
-                const SizedBox(width: AppTheme.spacingS),
-                Expanded(
-                  child: Text(
-                    growth > 0
-                        ? '${growth.toStringAsFixed(1)}% más que el mes pasado'
-                        : '${growth.abs().toStringAsFixed(1)}% menos que el mes pasado',
-                    style: AppTheme.bodySmall.copyWith(
-                      color: growth > 0 ? AppTheme.success : AppTheme.danger,
-                      fontWeight: FontWeight.w600,
+          ..._expenses
+              .map((expense) => Container(
+                    margin: const EdgeInsets.only(bottom: AppTheme.spacingM),
+                    padding: const EdgeInsets.all(AppTheme.spacingM),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundGray,
+                      borderRadius: AppTheme.borderRadiusSmall,
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: AppTheme.spacingL),
-
-          // View Detailed Report Button
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Reporte detallado - próximamente')),
-              ),
-              icon: const Icon(Icons.assessment_rounded),
-              label: const Text('Ver Reporte Detallado'),
-              style: OutlinedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(vertical: AppTheme.spacingM),
-              ),
-            ),
-          ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: AppTheme.spacingS,
+                                        vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: (expense['categoryType'] ==
+                                                  'operativo'
+                                              ? AppTheme.blue
+                                              : AppTheme.orange)
+                                          .withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      expense['category'] ?? 'Sin categoría',
+                                      style: AppTheme.caption.copyWith(
+                                        color: expense['categoryType'] ==
+                                                'operativo'
+                                            ? AppTheme.blue
+                                            : AppTheme.orange,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppTheme.spacingS),
+                                  Text(_formatTimestamp(expense['createdAt']),
+                                      style: AppTheme.bodySmall.copyWith(
+                                          color: AppTheme.mediumGray)),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(expense['description'] ?? '',
+                                  style: AppTheme.bodyMedium),
+                            ],
+                          ),
+                        ),
+                        Text(
+                            'Q${((expense['amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
+                            style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.danger)),
+                      ],
+                    ),
+                  ))
+              ,
         ],
       ),
-    );
-  }
-
-  Widget _buildFinancialRow(
-      String label, double amount, Color color, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(width: AppTheme.spacingS),
-        Expanded(
-          child: Text(
-            label,
-            style: AppTheme.bodyMedium,
-          ),
-        ),
-        Text(
-          'Q${amount.toStringAsFixed(2)}',
-          style: AppTheme.heading3.copyWith(color: color),
-        ),
-      ],
     );
   }
 
   // ========== DIALOGS ==========
-  void _showRecordDepositDialog() {
+  void _showAddExpenseDialog() {
+    final amountCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    String? selectedCategory;
+    String categoryType = 'operativo';
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Registrar Depósito'),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Origen del efectivo',
-                  prefixIcon: Icon(Icons.source_rounded),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Agregar Gasto'),
+          content: SizedBox(
+            width: 450,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: selectedCategory,
+                  decoration: const InputDecoration(labelText: 'Categoría'),
+                  items: _categories
+                      .map((cat) => DropdownMenuItem(
+                            value: cat['name'] as String,
+                            child: Text(cat['name'] as String),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    setDialogState(() {
+                      selectedCategory = v;
+                      final cat = _categories.firstWhere((c) => c['name'] == v,
+                          orElse: () => {});
+                      categoryType = cat['type'] ?? 'operativo';
+                    });
+                  },
                 ),
-                items: ['Caja Tienda', 'Mensajero', 'Forza']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (value) {},
-              ),
-              const SizedBox(height: AppTheme.spacingM),
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Monto',
-                  prefixIcon: Icon(Icons.attach_money_rounded),
-                  prefixText: 'Q',
+                const SizedBox(height: AppTheme.spacingM),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Monto', prefixText: 'Q'),
                 ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: AppTheme.spacingM),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Banco',
-                  prefixIcon: Icon(Icons.account_balance_rounded),
+                const SizedBox(height: AppTheme.spacingM),
+                TextField(
+                  controller: descCtrl,
+                  decoration: const InputDecoration(labelText: 'Descripción'),
+                  maxLines: 2,
                 ),
-                items: ['BAM', 'Banrural', 'G&T Continental', 'Industrial']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (value) {},
-              ),
-              const SizedBox(height: AppTheme.spacingL),
-              OutlinedButton.icon(
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Subir foto - próximamente')),
+                const SizedBox(height: AppTheme.spacingL),
+                OutlinedButton.icon(
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Subir recibo - próximamente'))),
+                  icon: const Icon(Icons.camera_alt_rounded),
+                  label: const Text('Subir Recibo'),
                 ),
-                icon: const Icon(Icons.camera_alt_rounded),
-                label: const Text('Subir Boleta de Depósito'),
-              ),
-            ],
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () async {
+                if (selectedCategory == null ||
+                    amountCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Complete todos los campos')));
+                  return;
+                }
+                final amount = double.tryParse(amountCtrl.text) ?? 0;
+                await ExpensesService.addExpense(
+                  amount: amount,
+                  category: selectedCategory!,
+                  categoryType: categoryType,
+                  description: descCtrl.text.trim(),
+                  createdBy: AuthService.currentUser?.uid ?? 'admin',
+                  status: 'approved', // Admin adds directly as approved
+                );
+                await _loadData();
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(Icons.check_circle_rounded,
+                              color: AppTheme.white),
+                          const SizedBox(width: AppTheme.spacingM),
+                          Expanded(
+                              child: Text('Gasto registrado',
+                                  style: AppTheme.bodySmall
+                                      .copyWith(color: AppTheme.white))),
+                        ],
+                      ),
+                      backgroundColor: AppTheme.success,
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Depósito registrado - próximamente')),
-              );
-            },
-            child: const Text('Registrar'),
-          ),
-        ],
       ),
     );
   }
 
-  void _showRecordExpenseDialog() {
+  void _showCategoryManagementDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Registrar Gasto'),
-        content: SizedBox(
-          width: 400,
+      builder: (context) => Dialog(
+        child: Container(
+          width: 600,
+          padding: const EdgeInsets.all(AppTheme.spacingXL),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Categoría',
-                  prefixIcon: Icon(Icons.category_rounded),
-                ),
-                items: [
-                  'Alquiler',
-                  'Salarios',
-                  'Proveedor',
-                  'Servicios',
-                  'Marketing',
-                  'Otros'
-                ]
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (value) {},
-              ),
-              const SizedBox(height: AppTheme.spacingM),
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Monto',
-                  prefixIcon: Icon(Icons.attach_money_rounded),
-                  prefixText: 'Q',
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: AppTheme.spacingM),
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Descripción',
-                  prefixIcon: Icon(Icons.description_rounded),
-                ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: AppTheme.spacingM),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Método de pago',
-                  prefixIcon: Icon(Icons.payment_rounded),
-                ),
-                items: ['Efectivo', 'Transferencia', 'Cheque', 'Tarjeta']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (value) {},
+              Row(
+                children: [
+                  const Icon(Icons.category_rounded,
+                      color: AppTheme.blue, size: 28),
+                  const SizedBox(width: AppTheme.spacingM),
+                  Text('Gestionar Categorías', style: AppTheme.heading2),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
               ),
               const SizedBox(height: AppTheme.spacingL),
-              OutlinedButton.icon(
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Subir foto - próximamente')),
+              FilledButton.icon(
+                onPressed: () => _showAddCategoryDialog(),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Agregar Categoría'),
+                style: FilledButton.styleFrom(backgroundColor: AppTheme.blue),
+              ),
+              const SizedBox(height: AppTheme.spacingL),
+              const Divider(),
+              const SizedBox(height: AppTheme.spacingM),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _categories.length,
+                  itemBuilder: (context, idx) {
+                    final cat = _categories[idx];
+                    return ListTile(
+                      title: Text(cat['name'] as String),
+                      subtitle: Text(cat['type'] == 'operativo'
+                          ? 'Operativo'
+                          : 'No Operativo'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_rounded, size: 18),
+                            onPressed: () => _showEditCategoryDialog(cat),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_rounded,
+                                size: 18, color: AppTheme.danger),
+                            onPressed: () => _deleteCategoryInDialog(cat),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
-                icon: const Icon(Icons.camera_alt_rounded),
-                label: const Text('Subir Recibo'),
               ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
+      ),
+    );
+  }
+
+  void _showAddCategoryDialog() {
+    final nameCtrl = TextEditingController();
+    String type = 'operativo';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Agregar Categoría'),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Nombre')),
+                const SizedBox(height: AppTheme.spacingM),
+                DropdownButtonFormField<String>(
+                  initialValue: type,
+                  decoration: const InputDecoration(labelText: 'Tipo'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'operativo', child: Text('Operativo')),
+                    DropdownMenuItem(
+                        value: 'no_operativo', child: Text('No Operativo')),
+                  ],
+                  onChanged: (v) =>
+                      setDialogState(() => type = v ?? 'operativo'),
+                ),
+              ],
+            ),
           ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Gasto registrado - próximamente')),
-              );
-            },
-            child: const Text('Registrar'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () async {
+                if (nameCtrl.text.trim().isNotEmpty) {
+                  await ExpensesService.addCategory(nameCtrl.text.trim(), type);
+                  await _loadData();
+                }
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditCategoryDialog(Map<String, dynamic> cat) {
+    final nameCtrl = TextEditingController(text: cat['name'] as String);
+    String type = cat['type'] as String;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Editar Categoría'),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Nombre')),
+                const SizedBox(height: AppTheme.spacingM),
+                DropdownButtonFormField<String>(
+                  initialValue: type,
+                  decoration: const InputDecoration(labelText: 'Tipo'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'operativo', child: Text('Operativo')),
+                    DropdownMenuItem(
+                        value: 'no_operativo', child: Text('No Operativo')),
+                  ],
+                  onChanged: (v) =>
+                      setDialogState(() => type = v ?? 'operativo'),
+                ),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () async {
+                await ExpensesService.updateCategory(cat['id'] as String,
+                    name: nameCtrl.text.trim(), type: type);
+                await _loadData();
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteCategoryInDialog(Map<String, dynamic> cat) async {
+    await ExpensesService.deleteCategory(cat['id'] as String);
+    await _loadData();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.info_outline_rounded, color: AppTheme.white),
+            const SizedBox(width: AppTheme.spacingM),
+            Expanded(
+                child: Text('Categoría eliminada',
+                    style: AppTheme.bodySmall.copyWith(color: AppTheme.white))),
+          ],
+        ),
+        backgroundColor: AppTheme.blue,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
       ),
     );
   }

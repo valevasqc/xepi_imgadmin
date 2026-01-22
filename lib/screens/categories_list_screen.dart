@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
+import 'package:xepi_imgadmin/services/auth_service.dart';
 import 'package:xepi_imgadmin/screens/category_detail_screen.dart';
 
 /// Categories list screen with grouped category cards
@@ -18,6 +19,7 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
   final FirebaseStorage _storage = FirebaseStorage.instance;
   bool _isLoading = true;
   Map<String, List<Map<String, dynamic>>> _groupedCategories = {};
+  final Map<String, bool> _primaryCategoryActiveStates = {};
 
   @override
   void initState() {
@@ -26,8 +28,21 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
   }
 
   Future<void> _loadCategories() async {
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
-      print('🔍 Loading categories from Firestore...');
+      // Load all products once and count by categoryCode
+      final productsSnapshot = await _firestore.collection('products').get();
+
+      final Map<String, int> productCounts = {};
+      for (var doc in productsSnapshot.docs) {
+        final code = doc.data()['categoryCode'] as String?;
+        if (code != null) {
+          productCounts[code] = (productCounts[code] ?? 0) + 1;
+        }
+      }
 
       // Load primary categories
       final primarySnapshot = await _firestore
@@ -35,16 +50,15 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
           .orderBy('displayOrder')
           .get();
 
-      print('📦 Found ${primarySnapshot.docs.length} primary categories');
-
       final Map<String, List<Map<String, dynamic>>> grouped = {};
 
       for (var primaryDoc in primarySnapshot.docs) {
         final primaryData = primaryDoc.data();
         final primaryName = primaryDoc.id;
         final primaryCoverImage = primaryData['coverImageUrl'];
+        final isActive = primaryData['isActive'] ?? true;
 
-        print('Processing primary category: $primaryName');
+        _primaryCategoryActiveStates[primaryName] = isActive;
 
         // Load subcategories from subcollection
         final subSnapshot = await primaryDoc.reference
@@ -52,23 +66,12 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
             .orderBy('displayOrder')
             .get();
 
-        print('  → Found ${subSnapshot.docs.length} subcategories');
-
         grouped[primaryName] = [];
         final hasOnlyOneSubcategory = subSnapshot.docs.length == 1;
 
         for (var subDoc in subSnapshot.docs) {
           final subData = subDoc.data();
           final code = subData['code'] as String;
-
-          // Count products in this category
-          final productCount = await _firestore
-              .collection('products')
-              .where('categoryCode', isEqualTo: code)
-              .count()
-              .get();
-
-          print('    → $code: ${productCount.count} products');
 
           // If only 1 subcategory, use primary cover as default
           final subcategoryCoverUrl = subData['coverImageUrl'];
@@ -86,7 +89,7 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
             'primaryCoverImageUrl': primaryCoverImage, // Fallback image
             'subcategoryName': subData['subcategoryName'],
             'defaultPrice': subData['defaultPrice'] ?? 0,
-            'itemCount': productCount.count ?? 0,
+            'itemCount': productCounts[code] ?? 0,
             'coverImageUrl':
                 effectiveCoverUrl, // Use primary if only 1 subcategory
           };
@@ -95,21 +98,16 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
         }
       }
 
-      print('✅ Grouped into ${grouped.length} primary categories');
-
       setState(() {
         _groupedCategories = grouped;
         _isLoading = false;
       });
-    } catch (e, stackTrace) {
-      print('❌ Error loading categories: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al cargar categorías: $e'),
             backgroundColor: AppTheme.danger,
-            duration: const Duration(seconds: 5),
           ),
         );
         setState(() => _isLoading = false);
@@ -181,7 +179,6 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
         ),
       );
 
-      // Reload categories to show new image
       _loadCategories();
     } catch (e) {
       if (!mounted) return;
@@ -272,6 +269,7 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
           ? 0
           : (existingCategories.docs.first.data()['displayOrder'] ?? 0) as int;
 
+      // Create primary category document
       await _firestore.collection('categories').doc(name).set({
         'name': name,
         'primaryCode': code,
@@ -282,10 +280,34 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      // Auto-create default subcategory with same name/code
+      final subcategoryCode = '$code-MAIN';
+      await _firestore
+          .collection('categories')
+          .doc(name)
+          .collection('subcategories')
+          .doc(subcategoryCode)
+          .set({
+        'code': subcategoryCode,
+        'name': name,
+        'primaryCategory': name,
+        'primaryCode': code,
+        'subcategoryName': name,
+        'defaultPrice': 0,
+        'coverImageUrl': null,
+        'bulkPricing': null,
+        'isActive': true,
+        'displayOrder': 1,
+        'hasSubcategories': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Categoría principal creada'),
+            content: Text(
+                'Categoría principal creada con subcategoría predeterminada'),
             backgroundColor: AppTheme.success,
           ),
         );
@@ -582,6 +604,43 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
     }
   }
 
+  Future<void> _togglePrimaryCategoryActive(
+      String primaryCategory, bool isActive) async {
+    try {
+      await _firestore.collection('categories').doc(primaryCategory).update({
+        'isActive': isActive,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      setState(() {
+        _primaryCategoryActiveStates[primaryCategory] = isActive;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isActive
+                  ? 'Categoría visible para clientes'
+                  : 'Categoría oculta para clientes',
+            ),
+            backgroundColor: AppTheme.success,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _reorderPrimaryCategory(
       String primaryCategory, bool moveUp) async {
     try {
@@ -597,8 +656,9 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
 
       if (currentIndex == -1) return;
       if (moveUp && currentIndex == 0) return; // Already first
-      if (!moveUp && currentIndex == categories.length - 1)
+      if (!moveUp && currentIndex == categories.length - 1) {
         return; // Already last
+      }
 
       final swapIndex = moveUp ? currentIndex - 1 : currentIndex + 1;
 
@@ -612,7 +672,6 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
       });
 
       await batch.commit();
-      _loadCategories();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -623,6 +682,8 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
           ),
         );
       }
+
+      _loadCategories();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -667,52 +728,56 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
           // Content
           Expanded(
             child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(),
-                  )
+                ? const Center(child: CircularProgressIndicator())
                 : _groupedCategories.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.folder_off_rounded,
                               size: 64,
-                              color: AppTheme.mediumGray.withValues(alpha: 0.5),
+                              color: AppTheme.mediumGray,
                             ),
-                            const SizedBox(height: AppTheme.spacingL),
+                            const SizedBox(height: AppTheme.spacingM),
                             Text(
                               'No hay categorías',
-                              style: AppTheme.heading3.copyWith(
-                                color: AppTheme.mediumGray,
-                              ),
+                              style: AppTheme.heading3
+                                  .copyWith(color: AppTheme.mediumGray),
                             ),
                           ],
                         ),
                       )
-                    : SingleChildScrollView(
-                        padding: const EdgeInsets.all(AppTheme.spacingXL),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: _groupedCategories.entries
-                              .toList()
-                              .asMap()
-                              .entries
-                              .map((entry) {
-                            final index = entry.key;
-                            final categoryEntry = entry.value;
-                            return _buildCategoryGroup(
-                              primaryCategory: categoryEntry.key,
-                              categories: categoryEntry.value,
-                              isFirst: index == 0,
-                              isLast: index == _groupedCategories.length - 1,
-                            );
-                          }).toList(),
-                        ),
-                      ),
+                    : _buildCategoriesGrid(_groupedCategories),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCategoriesGrid(
+      Map<String, List<Map<String, dynamic>>> groupedCategories) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppTheme.spacingXL),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: groupedCategories.entries.map((entry) {
+          final primaryCategory = entry.key;
+          final subcategories = entry.value;
+
+          return _buildPrimaryCategorySection(primaryCategory, subcategories);
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildPrimaryCategorySection(
+      String primaryCategory, List<Map<String, dynamic>> subcategories) {
+    return _buildCategoryGroup(
+      primaryCategory: primaryCategory,
+      categories: subcategories,
+      isFirst: false,
+      isLast: false,
     );
   }
 
@@ -727,143 +792,200 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
         ? categories[0]['primaryCoverImageUrl'] as String?
         : null;
 
+    final isActive = _primaryCategoryActiveStates[primaryCategory] ?? true;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Primary Category Header with Image Preview and Edit Button
-        Container(
-          margin: const EdgeInsets.only(bottom: AppTheme.spacingL),
-          padding: const EdgeInsets.all(AppTheme.spacingM),
-          decoration: BoxDecoration(
-            color: AppTheme.white,
-            borderRadius: AppTheme.borderRadiusMedium,
-            boxShadow: AppTheme.subtleShadow,
-          ),
-          child: Row(
-            children: [
-              // Primary Category Cover Image
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: AppTheme.backgroundGray,
-                  borderRadius: AppTheme.borderRadiusSmall,
-                  border: Border.all(
-                    color: AppTheme.lightGray,
-                    width: 2,
+        Opacity(
+          opacity: isActive ? 1.0 : 0.5,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: AppTheme.spacingL),
+            padding: const EdgeInsets.all(AppTheme.spacingM),
+            decoration: BoxDecoration(
+              color: AppTheme.white,
+              borderRadius: AppTheme.borderRadiusMedium,
+              boxShadow: AppTheme.subtleShadow,
+            ),
+            child: Row(
+              children: [
+                // Primary Category Cover Image
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGray,
+                    borderRadius: AppTheme.borderRadiusSmall,
+                    border: Border.all(
+                      color: AppTheme.lightGray,
+                      width: 2,
+                    ),
                   ),
-                ),
-                child: primaryCoverImageUrl != null
-                    ? ClipRRect(
-                        borderRadius: AppTheme.borderRadiusSmall,
-                        child: Image.network(
-                          primaryCoverImageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Center(
-                              child: Icon(
-                                Icons.broken_image_rounded,
-                                size: 32,
-                                color: AppTheme.mediumGray,
-                              ),
-                            );
-                          },
+                  child: primaryCoverImageUrl != null
+                      ? ClipRRect(
+                          borderRadius: AppTheme.borderRadiusSmall,
+                          child: Image.network(
+                            primaryCoverImageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Center(
+                                child: Icon(
+                                  Icons.broken_image_rounded,
+                                  size: 32,
+                                  color: AppTheme.mediumGray,
+                                ),
+                              );
+                            },
+                          ),
+                        )
+                      : const Center(
+                          child: Icon(
+                            Icons.category_rounded,
+                            size: 40,
+                            color: AppTheme.mediumGray,
+                          ),
                         ),
-                      )
-                    : const Center(
-                        child: Icon(
-                          Icons.category_rounded,
-                          size: 40,
+                ),
+                const SizedBox(width: AppTheme.spacingM),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        primaryCategory.toUpperCase(),
+                        style: AppTheme.heading3.copyWith(
+                          letterSpacing: 1.5,
+                          color: AppTheme.darkGray,
+                        ),
+                      ),
+                      const SizedBox(height: AppTheme.spacingXS),
+                      Text(
+                        '${categories.length} subcategorías',
+                        style: AppTheme.bodySmall.copyWith(
                           color: AppTheme.mediumGray,
                         ),
                       ),
-              ),
-              const SizedBox(width: AppTheme.spacingM),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                    ],
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _uploadPrimaryCategoryImage(primaryCategory),
+                  icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
+                  label:
+                      Text(primaryCoverImageUrl != null ? 'Cambiar' : 'Subir'),
+                ),
+                const SizedBox(width: AppTheme.spacingS),
+                OutlinedButton.icon(
+                  onPressed: () => _showAddSubcategoryDialog(primaryCategory),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Agregar'),
+                ),
+                const SizedBox(width: AppTheme.spacingS),
+                // Active toggle
+                Row(
                   children: [
                     Text(
-                      primaryCategory.toUpperCase(),
-                      style: AppTheme.heading3.copyWith(
-                        letterSpacing: 1.5,
-                        color: AppTheme.darkGray,
-                      ),
-                    ),
-                    const SizedBox(height: AppTheme.spacingXS),
-                    Text(
-                      '${categories.length} subcategorías',
+                      'Visible:',
                       style: AppTheme.bodySmall.copyWith(
                         color: AppTheme.mediumGray,
                       ),
                     ),
+                    const SizedBox(width: AppTheme.spacingXS),
+                    Switch(
+                      value: isActive,
+                      onChanged: (value) =>
+                          _togglePrimaryCategoryActive(primaryCategory, value),
+                      activeThumbColor: AppTheme.success,
+                    ),
                   ],
                 ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _uploadPrimaryCategoryImage(primaryCategory),
-                icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
-                label: Text(primaryCoverImageUrl != null ? 'Cambiar' : 'Subir'),
-              ),
-              const SizedBox(width: AppTheme.spacingS),
-              OutlinedButton.icon(
-                onPressed: () => _showAddSubcategoryDialog(primaryCategory),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Agregar'),
-              ),
-              const SizedBox(width: AppTheme.spacingS),
-              // Reorder arrows
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+                const SizedBox(width: AppTheme.spacingS),
+                // Reorder arrows
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: isFirst
+                          ? null
+                          : () =>
+                              _reorderPrimaryCategory(primaryCategory, true),
+                      icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                      tooltip: 'Mover arriba',
+                    ),
+                    IconButton(
+                      onPressed: isLast
+                          ? null
+                          : () =>
+                              _reorderPrimaryCategory(primaryCategory, false),
+                      icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                      tooltip: 'Mover abajo',
+                    ),
+                  ],
+                ),
+                const SizedBox(width: AppTheme.spacingS),
+                // Delete primary category button (SUPERUSER ONLY)
+                if (AuthService.isSuperuser)
                   IconButton(
-                    onPressed: isFirst
-                        ? null
-                        : () => _reorderPrimaryCategory(primaryCategory, true),
-                    icon: const Icon(Icons.arrow_upward_rounded, size: 18),
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                    tooltip: 'Mover arriba',
-                  ),
+                    onPressed: () => _deletePrimaryCategory(primaryCategory),
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    color: AppTheme.danger,
+                    tooltip: 'Eliminar categoría',
+                  )
+                else
                   IconButton(
-                    onPressed: isLast
-                        ? null
-                        : () => _reorderPrimaryCategory(primaryCategory, false),
-                    icon: const Icon(Icons.arrow_downward_rounded, size: 18),
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                    tooltip: 'Mover abajo',
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Row(
+                            children: [
+                              Icon(Icons.info_outline_rounded,
+                                  color: AppTheme.white),
+                              SizedBox(width: AppTheme.spacingM),
+                              Expanded(
+                                child: Text(
+                                    'Contacta al administrador para eliminar categorías principales'),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: AppTheme.blue,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.info_outline_rounded),
+                    color: AppTheme.mediumGray,
+                    tooltip: 'Solo administrador',
                   ),
-                ],
-              ),
-              const SizedBox(width: AppTheme.spacingS),
-              IconButton(
-                onPressed: () => _deletePrimaryCategory(primaryCategory),
-                icon: const Icon(Icons.delete_outline_rounded),
-                color: AppTheme.danger,
-                tooltip: 'Eliminar categoría',
-              ),
-            ],
+              ],
+            ),
           ),
         ),
 
         // Category Cards Grid
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 300,
-            childAspectRatio:
-                0.72, // Balanced ratio for square image + compact info
-            crossAxisSpacing: AppTheme.spacingL,
-            mainAxisSpacing: AppTheme.spacingL,
+        Opacity(
+          opacity: isActive ? 1.0 : 0.5,
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 300,
+              childAspectRatio:
+                  0.72, // Balanced ratio for square image + compact info
+              crossAxisSpacing: AppTheme.spacingL,
+              mainAxisSpacing: AppTheme.spacingL,
+            ),
+            itemCount: categories.length,
+            itemBuilder: (context, index) {
+              return _buildCategoryCard(categories[index]);
+            },
           ),
-          itemCount: categories.length,
-          itemBuilder: (context, index) {
-            return _buildCategoryCard(categories[index]);
-          },
         ),
 
         const SizedBox(height: AppTheme.spacingXXL),
