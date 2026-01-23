@@ -355,16 +355,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 }
               }
             }
-          } else if (key != 'coverImage' && 
-                     key != '__placeholder__' && 
-                     key != '_empty' &&
-                     value != null &&
-                     value.toString().trim().isNotEmpty &&
-                     value.toString().startsWith('http')) {
-            fetchedImages.add(MapEntry(key.toString(), value.toString()));
-          } else {
-            debugPrint('  ⚠️ FILTERED OUT TOP-LEVEL: $key = ${value}');
           }
+          // Removed: top-level product processing to prevent duplicates
+          // All products should be under 'products' key only
         });
 
         fetchedImages.sort((a, b) {
@@ -375,16 +368,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
         debugPrint('Total fetched images: ${fetchedImages.length}');
         
-        // CLEANUP: If we filtered out any entries, rewrite the database to fix indexing
+        // AUTO-CLEANUP DISABLED - caused duplication bug
+        // Only manual cleanup via delete function
+        /*
         final productsData = data['products'];
         if (productsData is List) {
-          // Firebase returned a List - check if original length doesn't match filtered length
-          final originalLength = (productsData as List).length;
+          final originalLength = productsData.length;
           debugPrint('Original list length: $originalLength, Filtered: ${fetchedImages.length}');
           
           if (originalLength != fetchedImages.length) {
             debugPrint('⚠️ Found ${originalLength - fetchedImages.length} invalid entries, cleaning up database...');
-            // Rewrite as a clean Map with sequential keys (0, 1, 2, 3...)
             final Map<String, dynamic> cleanedProducts = {};
             for (int i = 0; i < fetchedImages.length; i++) {
               cleanedProducts[i.toString()] = fetchedImages[i].value;
@@ -393,9 +386,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             debugPrint('✅ Database cleaned and reindexed with ${fetchedImages.length} valid entries');
           }
         } else if (productsData is Map) {
-          // Check if there are invalid entries in the map
           final invalidKeys = <String>[];
-          (productsData as Map).forEach((key, value) {
+          productsData.forEach((key, value) {
             if (key == '__placeholder__' || key == '_empty' || 
                 value == null || 
                 !value.toString().trim().startsWith('http')) {
@@ -411,6 +403,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             debugPrint('✅ Removed invalid entries: $invalidKeys');
           }
         }
+        */
         
         setState(() {
           _orderedImages = fetchedImages;
@@ -693,7 +686,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               .child('products')
               .set(updates);
 
-          // Cleanup any empty/null objects that might remain
+          // Cleanup any empty/null objects that might remain in products
           final verifySnapshot = await _databaseRef
               .child(_selectedCategory!)
               .child('products')
@@ -710,6 +703,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   await _databaseRef
                       .child(_selectedCategory!)
                       .child('products')
+                      .child(key.toString())
+                      .remove();
+                }
+              }
+            }
+          }
+
+          // Also cleanup any old top-level img_* keys in the category
+          final categorySnapshot = await _databaseRef
+              .child(_selectedCategory!)
+              .get();
+          if (categorySnapshot.exists) {
+            final categoryData = categorySnapshot.value;
+            if (categoryData is Map<dynamic, dynamic>) {
+              // Find and remove old img_* keys (legacy structure)
+              for (var key in categoryData.keys) {
+                if (key.toString().startsWith('img_')) {
+                  debugPrint('Cleaning up old img_* key: $key');
+                  await _databaseRef
+                      .child(_selectedCategory!)
                       .child(key.toString())
                       .remove();
                 }
