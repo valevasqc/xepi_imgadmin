@@ -149,21 +149,82 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               .doc(widget.saleId)
               .update(updates);
         }
-      } else if (newStatus == 'completed') {
-        // Ensure timestamps exist when jumping to completed
+      } else if (newStatus == 'cash_received') {
+        // Ensure timestamps exist when jumping to cash_received
         if (_saleData!['pickedUpAt'] == null) {
           updates['pickedUpAt'] = FieldValue.serverTimestamp();
         }
         if (_saleData!['deliveredAt'] == null) {
           updates['deliveredAt'] = FieldValue.serverTimestamp();
         }
-        updates['completedAt'] = FieldValue.serverTimestamp();
-        await _firestore.collection('sales').doc(widget.saleId).update(updates);
+        updates['cashReceivedAt'] = FieldValue.serverTimestamp();
+
+        // When cash_received, ensure stock deducted and add to pending cash if not already there
+        final stockStatus = _saleData!['stockStatus'] as String?;
+        final paymentMethod = _saleData!['paymentMethod'] as String?;
+        final saleType = _saleData!['saleType'] as String?;
+        final deliveryMethod = _saleData!['deliveryMethod'] as String?;
+
+        final batch = _firestore.batch();
+
+        // Update sale with new status
+        batch.update(
+          _firestore.collection('sales').doc(widget.saleId),
+          {...updates, if (stockStatus == 'in_transit') 'stockStatus': 'completed'},
+        );
+
+        // Deduct stock if still in_transit
+        if (stockStatus == 'in_transit') {
+          final deductFrom = _saleData!['deductFrom'] as String? ?? 'store';
+          final stockField =
+              deductFrom == 'store' ? 'stockStore' : 'stockWarehouse';
+          final items = _saleData!['items'] as List<dynamic>;
+
+          for (var item in items) {
+            final barcode = item['barcode'] as String;
+            final quantity = item['quantity'] as int;
+            final productRef = _firestore.collection('products').doc(barcode);
+
+            batch.update(productRef, {
+              stockField: FieldValue.increment(-quantity),
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
+        }
+
+        // Add to pending cash if efectivo delivery and not already in deposit
+        if (paymentMethod == 'efectivo' && saleType == 'delivery' && _saleData!['depositId'] == null) {
+          String cashSource;
+          if (deliveryMethod == 'mensajero') {
+            cashSource = 'mensajero';
+          } else if (deliveryMethod == 'forza') {
+            cashSource = 'forza';
+          } else {
+            cashSource = 'store';
+          }
+
+          final pendingCashRef =
+              _firestore.collection('pendingCash').doc(cashSource);
+          final total = (_saleData!['total'] as num?)?.toDouble() ?? 0.0;
+
+          batch.set(
+            pendingCashRef,
+            {
+              'source': cashSource,
+              'amount': FieldValue.increment(total),
+              'saleIds': FieldValue.arrayUnion([widget.saleId]),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        }
+
+        await batch.commit();
       } else if (newStatus == 'pending') {
         // Moving back to pending - clear all timestamps and restore stock if needed
         updates['pickedUpAt'] = null;
         updates['deliveredAt'] = null;
-        updates['completedAt'] = null;
+        updates['cashReceivedAt'] = null;
 
         final stockStatus = _saleData!['stockStatus'] as String?;
         final paymentMethod = _saleData!['paymentMethod'] as String?;
@@ -1377,9 +1438,9 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 ElevatedButton.icon(
                   onPressed: _isProcessing
                       ? null
-                      : () => _updateDeliveryStatus('completed'),
-                  icon: const Icon(Icons.done_all_rounded, size: 18),
-                  label: const Text('Marcar Completado'),
+                      : () => _updateDeliveryStatus('cash_received'),
+                  icon: const Icon(Icons.payments_rounded, size: 18),
+                  label: const Text('Efectivo Recibido'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.success,
                     foregroundColor: AppTheme.white,
@@ -1472,6 +1533,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         return AppTheme.blue;
       case 'delivered':
         return AppTheme.success;
+      case 'cash_received':
+        return AppTheme.darkGray;
       default:
         return AppTheme.mediumGray;
     }
@@ -1485,6 +1548,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         return 'Recogido';
       case 'delivered':
         return 'Entregado';
+      case 'cash_received':
+        return 'Efectivo Recibido';
       default:
         return status;
     }

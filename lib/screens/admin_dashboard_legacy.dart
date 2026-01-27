@@ -1,3 +1,9 @@
+// ⚠️ DO NOT DELETE THIS FILE ⚠️
+// This is the legacy admin dashboard for managing the OLD image system
+// (Firebase Realtime Database + Storage with img_* keys structure).
+// Used for managing product images in the legacy "images" collection.
+// Keep this file for backward compatibility and maintenance of existing images.
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';

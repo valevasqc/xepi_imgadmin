@@ -4,9 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'config/app_theme.dart';
 import 'screens/admin_login.dart';
-// TEMPORARY: Testing legacy bug fix
-import 'screens/admin_dashboard_legacy.dart';
-// import 'screens/main_layout.dart';
+import 'screens/main_layout.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,7 +37,7 @@ class AdminApp extends StatelessWidget {
             );
           }
           if (snapshot.hasData) {
-            return const AdminDashboard();
+            return const MainLayout();
           }
           return const AdminLoginScreen();
         },

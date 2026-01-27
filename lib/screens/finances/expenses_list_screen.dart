@@ -69,6 +69,11 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
                 color: AppTheme.white, boxShadow: AppTheme.subtleShadow),
             child: Row(
               children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const SizedBox(width: AppTheme.spacingM),
                 const Icon(Icons.receipt_long_rounded,
                     color: AppTheme.danger, size: 32),
                 const SizedBox(width: AppTheme.spacingM),

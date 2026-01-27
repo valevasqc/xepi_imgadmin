@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
-import 'package:xepi_imgadmin/screens/future/receive_shipment_screen.dart';
-import 'package:xepi_imgadmin/screens/future/shipment_detail_screen.dart';
+import 'package:xepi_imgadmin/screens/inventory/receive_shipment_screen.dart';
+import 'package:xepi_imgadmin/screens/inventory/shipment_detail_screen.dart';
 import 'package:xepi_imgadmin/widgets/status_filter_chips.dart';
 import 'package:xepi_imgadmin/utils/date_formatter.dart';
 import 'package:xepi_imgadmin/utils/status_helper.dart';
@@ -84,6 +84,11 @@ class _ShipmentHistoryScreenState extends State<ShipmentHistoryScreen> {
                 color: AppTheme.white, boxShadow: AppTheme.subtleShadow),
             child: Row(
               children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const SizedBox(width: AppTheme.spacingM),
                 Text('Historial de Recepciones', style: AppTheme.heading1),
                 const Spacer(),
                 FilledButton.icon(

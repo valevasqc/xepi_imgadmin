@@ -3,8 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/utils/date_formatter.dart';
 import 'package:xepi_imgadmin/widgets/status_filter_chips.dart';
-import 'package:xepi_imgadmin/screens/future/register_sale_screen.dart';
-import 'package:xepi_imgadmin/screens/future/sale_detail_screen.dart';
+import 'package:xepi_imgadmin/screens/sales/register_sale_screen.dart';
+import 'package:xepi_imgadmin/screens/sales/sale_detail_screen.dart';
 
 class SalesHistoryScreen extends StatefulWidget {
   const SalesHistoryScreen({super.key});

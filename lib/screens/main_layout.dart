@@ -4,13 +4,13 @@ import 'package:xepi_imgadmin/services/auth_service.dart';
 import 'package:xepi_imgadmin/screens/dashboard_screen.dart';
 import 'package:xepi_imgadmin/screens/products_list_screen.dart';
 import 'package:xepi_imgadmin/screens/categories_list_screen.dart';
-import 'package:xepi_imgadmin/screens/finances_screen.dart';
+import 'package:xepi_imgadmin/screens/finances/finances_screen.dart';
 import 'package:xepi_imgadmin/screens/settings_screen.dart';
-import 'package:xepi_imgadmin/screens/future/orders_history_screen.dart';
-import 'package:xepi_imgadmin/screens/future/shipment_history_screen.dart';
-import 'package:xepi_imgadmin/screens/future/movement_history_screen.dart';
-import 'package:xepi_imgadmin/screens/future/sales_history_screen.dart';
-import 'package:xepi_imgadmin/screens/future/deposits_screen.dart';
+import 'package:xepi_imgadmin/screens/orders/orders_history_screen.dart';
+import 'package:xepi_imgadmin/screens/inventory/shipment_history_screen.dart';
+import 'package:xepi_imgadmin/screens/inventory/movement_history_screen.dart';
+import 'package:xepi_imgadmin/screens/sales/sales_history_screen.dart';
+import 'package:xepi_imgadmin/screens/finances/deposits_screen.dart';
 import 'package:xepi_imgadmin/screens/future/reports_screen.dart';
 
 /// Main layout with collapsible sidebar navigation with grouped dropdowns

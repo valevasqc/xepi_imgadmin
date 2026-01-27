@@ -39,6 +39,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             child: Row(
               children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const SizedBox(width: AppTheme.spacingM),
                 Text(
                   'Configuración',
                   style: AppTheme.heading1,

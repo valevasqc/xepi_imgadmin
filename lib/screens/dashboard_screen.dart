@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
-import 'package:xepi_imgadmin/screens/future/deposits_screen.dart';
-import 'package:xepi_imgadmin/screens/future/sales_history_screen.dart';
-import 'package:xepi_imgadmin/screens/future/shipment_history_screen.dart';
-import 'package:xepi_imgadmin/screens/finances_screen.dart';
+import 'package:xepi_imgadmin/screens/finances/deposits_screen.dart';
+import 'package:xepi_imgadmin/screens/sales/sales_history_screen.dart';
+import 'package:xepi_imgadmin/screens/inventory/shipment_history_screen.dart';
+import 'package:xepi_imgadmin/screens/finances/finances_screen.dart';
 import 'package:intl/intl.dart';
 
 class DashboardScreen extends StatefulWidget {

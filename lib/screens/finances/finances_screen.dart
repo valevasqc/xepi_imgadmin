@@ -122,6 +122,11 @@ class _FinancesScreenState extends State<FinancesScreen> {
             ),
             child: Row(
               children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const SizedBox(width: AppTheme.spacingM),
                 const Icon(Icons.account_balance_wallet_rounded,
                     color: AppTheme.blue, size: 32),
                 const SizedBox(width: AppTheme.spacingM),

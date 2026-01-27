@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/utils/date_formatter.dart';
 import 'package:xepi_imgadmin/utils/status_helper.dart';
-import 'package:xepi_imgadmin/screens/future/receive_shipment_screen.dart';
+import 'package:xepi_imgadmin/screens/inventory/receive_shipment_screen.dart';
 
 class ShipmentDetailScreen extends StatefulWidget {
   final String shipmentId;

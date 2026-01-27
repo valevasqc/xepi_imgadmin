@@ -910,85 +910,11 @@ class _DepositsScreenState extends State<DepositsScreen> {
                   final source = doc.id;
                   final amount = data['amount'] ?? 0.0;
                   final saleIds = List<String>.from(data['saleIds'] ?? []);
-                  final updatedAt = data['updatedAt'] as Timestamp?;
 
-                  // Calculate days pending
-                  int daysPending = 0;
-                  if (updatedAt != null) {
-                    final diff = DateTime.now().difference(updatedAt.toDate());
-                    daysPending = diff.inDays;
-                  }
-
-                  // Color based on days pending
-                  Color statusColor = AppTheme.success;
-                  if (daysPending > 7) {
-                    statusColor = AppTheme.danger;
-                  } else if (daysPending > 3) {
-                    statusColor = AppTheme.warning;
-                  }
-
-                  IconData sourceIcon;
-                  String sourceName;
-                  switch (source) {
-                    case 'store':
-                      sourceIcon = Icons.store_rounded;
-                      sourceName = 'Tienda';
-                      break;
-                    case 'mensajero':
-                      sourceIcon = Icons.delivery_dining_rounded;
-                      sourceName = 'Mensajero';
-                      break;
-                    case 'forza':
-                      sourceIcon = Icons.local_shipping_rounded;
-                      sourceName = 'Forza';
-                      break;
-                    default:
-                      sourceIcon = Icons.account_balance_wallet_rounded;
-                      sourceName = source;
-                  }
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: AppTheme.spacingM),
-                    child: Container(
-                      padding: const EdgeInsets.all(AppTheme.spacingM),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: statusColor.withOpacity(0.3)),
-                        borderRadius: AppTheme.borderRadiusSmall,
-                        color: statusColor.withOpacity(0.05),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(sourceIcon, color: statusColor, size: 32),
-                          const SizedBox(width: AppTheme.spacingM),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(sourceName, style: AppTheme.bodyLarge),
-                                Text(
-                                  '${saleIds.length} venta${saleIds.length != 1 ? 's' : ''}',
-                                  style: AppTheme.bodySmall
-                                      .copyWith(color: AppTheme.mediumGray),
-                                ),
-                                if (daysPending > 0)
-                                  Text(
-                                    '$daysPending día${daysPending != 1 ? 's' : ''} pendiente${daysPending != 1 ? 's' : ''}',
-                                    style: AppTheme.bodySmall.copyWith(
-                                      color: statusColor,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            _currencyFormat.format(amount),
-                            style:
-                                AppTheme.heading3.copyWith(color: statusColor),
-                          ),
-                        ],
-                      ),
-                    ),
+                  return _PendingCashSourceCard(
+                    source: source,
+                    amount: amount,
+                    saleIds: saleIds,
                   );
                 }),
             ],
@@ -1426,6 +1352,135 @@ class _DepositsScreenState extends State<DepositsScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// Helper widget to handle async days pending calculation
+class _PendingCashSourceCard extends StatelessWidget {
+  final String source;
+  final double amount;
+  final List<String> saleIds;
+
+  const _PendingCashSourceCard({
+    required this.source,
+    required this.amount,
+    required this.saleIds,
+  });
+
+  Future<int> _calculateDaysPending() async {
+    if (amount <= 0 || saleIds.isEmpty) return 0;
+
+    // Fetch the oldest sale to get accurate days pending
+    DateTime? oldestSaleDate;
+    for (final saleId in saleIds) {
+      try {
+        final saleDoc = await FirebaseFirestore.instance
+            .collection('sales')
+            .doc(saleId)
+            .get();
+        if (saleDoc.exists) {
+          final saleData = saleDoc.data()!;
+          final createdAt = saleData['createdAt'] as Timestamp?;
+          if (createdAt != null) {
+            final saleDate = createdAt.toDate();
+            if (oldestSaleDate == null || saleDate.isBefore(oldestSaleDate)) {
+              oldestSaleDate = saleDate;
+            }
+          }
+        }
+      } catch (e) {
+        // Skip if sale doesn't exist
+      }
+    }
+
+    if (oldestSaleDate != null) {
+      final diff = DateTime.now().difference(oldestSaleDate);
+      return diff.inDays;
+    }
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<int>(
+      future: _calculateDaysPending(),
+      builder: (context, snapshot) {
+        final daysPending = snapshot.data ?? 0;
+
+        // Color based on days pending
+        Color statusColor = AppTheme.success;
+        if (daysPending > 7) {
+          statusColor = AppTheme.danger;
+        } else if (daysPending > 3) {
+          statusColor = AppTheme.warning;
+        }
+
+        IconData sourceIcon;
+        String sourceName;
+        switch (source) {
+          case 'store':
+            sourceIcon = Icons.store_rounded;
+            sourceName = 'Tienda';
+            break;
+          case 'mensajero':
+            sourceIcon = Icons.delivery_dining_rounded;
+            sourceName = 'Mensajero';
+            break;
+          case 'forza':
+            sourceIcon = Icons.local_shipping_rounded;
+            sourceName = 'Forza';
+            break;
+          default:
+            sourceIcon = Icons.account_balance_wallet_rounded;
+            sourceName = source;
+        }
+
+        final currencyFormat = NumberFormat.currency(symbol: 'Q', decimalDigits: 2);
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppTheme.spacingM),
+          child: Container(
+            padding: const EdgeInsets.all(AppTheme.spacingM),
+            decoration: BoxDecoration(
+              border: Border.all(color: statusColor.withOpacity(0.3)),
+              borderRadius: AppTheme.borderRadiusSmall,
+              color: statusColor.withOpacity(0.05),
+            ),
+            child: Row(
+              children: [
+                Icon(sourceIcon, color: statusColor, size: 32),
+                const SizedBox(width: AppTheme.spacingM),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(sourceName, style: AppTheme.bodyLarge),
+                      Text(
+                        '${saleIds.length} venta${saleIds.length != 1 ? 's' : ''}',
+                        style: AppTheme.bodySmall
+                            .copyWith(color: AppTheme.mediumGray),
+                      ),
+                      if (daysPending > 0)
+                        Text(
+                          '$daysPending día${daysPending != 1 ? 's' : ''} pendiente${daysPending != 1 ? 's' : ''}',
+                          style: AppTheme.bodySmall.copyWith(
+                            color: statusColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Text(
+                  currencyFormat.format(amount),
+                  style: AppTheme.heading3.copyWith(color: statusColor),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -70,6 +70,11 @@ class _ExpenseCategoriesScreenState extends State<ExpenseCategoriesScreen> {
             ),
             child: Row(
               children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const SizedBox(width: AppTheme.spacingM),
                 const Icon(Icons.category_rounded,
                     color: AppTheme.blue, size: 32),
                 const SizedBox(width: AppTheme.spacingM),
