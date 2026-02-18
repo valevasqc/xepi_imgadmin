@@ -5,6 +5,7 @@ import 'package:xepi_imgadmin/utils/date_formatter.dart';
 import 'package:xepi_imgadmin/utils/status_helper.dart';
 import 'package:xepi_imgadmin/widgets/status_filter_chips.dart';
 import 'package:xepi_imgadmin/screens/sales/sale_detail_screen.dart';
+import 'package:xepi_imgadmin/screens/sales/register_sale_screen.dart';
 
 class OrdersHistoryScreen extends StatefulWidget {
   const OrdersHistoryScreen({super.key});
@@ -88,6 +89,29 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
             child: Row(
               children: [
                 Text('Envíos', style: AppTheme.heading1),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterSaleScreen(
+                          initialSaleType: 'delivery',
+                        ),
+                      ),
+                    ).then((_) => _loadOrders());
+                  },
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Registrar Envío'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.blue,
+                    foregroundColor: AppTheme.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.spacingL,
+                      vertical: AppTheme.spacingM,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

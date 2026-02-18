@@ -633,10 +633,14 @@ class _MovementDetailScreenState extends State<MovementDetailScreen> {
                   ),
                 ],
                 if (status == 'sent') ...[
-                  OutlinedButton.icon(
+                  FilledButton.icon(
                     onPressed: _isProcessing ? null : _undoMovement,
                     icon: const Icon(Icons.undo_rounded),
                     label: const Text('Deshacer Envío'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.orange,
+                      foregroundColor: AppTheme.white,
+                    ),
                   ),
                   const SizedBox(width: AppTheme.spacingM),
                   ElevatedButton.icon(
@@ -660,10 +664,14 @@ class _MovementDetailScreenState extends State<MovementDetailScreen> {
                     tooltip: 'Eliminar',
                   ),
                   const SizedBox(width: AppTheme.spacingM),
-                  OutlinedButton.icon(
+                  FilledButton.icon(
                     onPressed: _isProcessing ? null : _undoMovement,
                     icon: const Icon(Icons.undo_rounded),
                     label: const Text('Deshacer'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.orange,
+                      foregroundColor: AppTheme.white,
+                    ),
                   ),
                 ],
               ],

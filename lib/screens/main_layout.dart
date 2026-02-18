@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/services/auth_service.dart';
 import 'package:xepi_imgadmin/screens/dashboard_screen.dart';
-import 'package:xepi_imgadmin/screens/products_list_screen.dart';
-import 'package:xepi_imgadmin/screens/categories_list_screen.dart';
+import 'package:xepi_imgadmin/screens/products/products_list_screen.dart';
+import 'package:xepi_imgadmin/screens/categories/categories_list_screen.dart';
 import 'package:xepi_imgadmin/screens/finances/finances_screen.dart';
 import 'package:xepi_imgadmin/screens/settings_screen.dart';
 import 'package:xepi_imgadmin/screens/orders/orders_history_screen.dart';
@@ -11,7 +11,8 @@ import 'package:xepi_imgadmin/screens/inventory/shipment_history_screen.dart';
 import 'package:xepi_imgadmin/screens/inventory/movement_history_screen.dart';
 import 'package:xepi_imgadmin/screens/sales/sales_history_screen.dart';
 import 'package:xepi_imgadmin/screens/finances/deposits_screen.dart';
-import 'package:xepi_imgadmin/screens/future/reports_screen.dart';
+import 'package:xepi_imgadmin/screens/finances/bank_accounts_screen.dart';
+import 'package:xepi_imgadmin/screens/finances/reports_screen.dart';
 
 /// Main layout with collapsible sidebar navigation with grouped dropdowns
 class MainLayout extends StatefulWidget {
@@ -116,8 +117,14 @@ class _MainLayoutState extends State<MainLayout> {
           page: const FinancesScreen(),
         ),
         NavigationItem(
-          key: 'deposits',
+          key: 'bank_accounts',
           icon: Icons.account_balance_rounded,
+          label: 'Cuentas Bancarias',
+          page: const BankAccountsScreen(),
+        ),
+        NavigationItem(
+          key: 'deposits',
+          icon: Icons.receipt_rounded,
           label: 'Depósitos',
           page: const DepositsScreen(),
         ),

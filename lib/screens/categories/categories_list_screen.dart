@@ -4,7 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/services/auth_service.dart';
-import 'package:xepi_imgadmin/screens/category_detail_screen.dart';
+import 'package:xepi_imgadmin/screens/categories/category_detail_screen.dart';
 
 /// Categories list screen with grouped category cards
 class CategoriesListScreen extends StatefulWidget {

@@ -4,9 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/widgets/product_search_dialog.dart';
+import 'package:xepi_imgadmin/services/bank_accounts_service.dart';
 
 class RegisterSaleScreen extends StatefulWidget {
-  const RegisterSaleScreen({super.key});
+  final String? initialSaleType;
+  
+  const RegisterSaleScreen({super.key, this.initialSaleType});
 
   @override
   State<RegisterSaleScreen> createState() => _RegisterSaleScreenState();
@@ -15,13 +18,18 @@ class RegisterSaleScreen extends StatefulWidget {
 class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final BankAccountsService _bankAccountsService = BankAccountsService();
 
   // Sale type
-  String _saleType = 'kiosko'; // 'kiosko' | 'delivery'
+  late String _saleType; // 'kiosko' | 'delivery'
   String? _deliveryMethod; // 'mensajero' | 'forza'
   String _paymentMethod =
       'efectivo'; // 'efectivo' | 'transferencia' | 'tarjeta'
   String _deductFrom = 'store'; // 'store' | 'warehouse'
+  String? _selectedBankAccount; // For transferencia/tarjeta
+
+  // Bank accounts
+  List<Map<String, dynamic>> _bankAccounts = [];
 
   // Cart items
   final Map<String, Map<String, dynamic>> _cartItems = {};
@@ -46,9 +54,22 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
   @override
   void initState() {
     super.initState();
+    _saleType = widget.initialSaleType ?? 'kiosko';
+    _loadBankAccounts();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _barcodeFocusNode.requestFocus();
     });
+  }
+
+  Future<void> _loadBankAccounts() async {
+    try {
+      final accounts = await _bankAccountsService.getActiveAccounts();
+      setState(() {
+        _bankAccounts = accounts;
+      });
+    } catch (e) {
+      // Silent fail - defaults to empty list
+    }
   }
 
   @override
@@ -63,11 +84,64 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
     super.dispose();
   }
 
+  // Check if item is eligible for bulk pricing (cuadros 20x30 or 15x30)
+  bool _isBulkEligible(Map<String, dynamic> item) {
+    final productData = item['productData'] as Map<String, dynamic>?;
+    if (productData == null) return false;
+    
+    final categoryCode = productData['categoryCode'] as String?;
+    // Cuadros 20x30 and 15x30 are eligible for bulk pricing
+    return categoryCode == 'CUA-2030' || categoryCode == 'CUA-1530';
+  }
+
+  // Get total quantity of bulk-eligible items in cart
+  int _getBulkEligibleQuantity() {
+    return _cartItems.values.fold<int>(0, (sum, item) {
+      if (_isBulkEligible(item)) {
+        return sum + (item['quantity'] as int);
+      }
+      return sum;
+    });
+  }
+
+  // Get effective unit price for an item (applying bulk pricing if applicable)
+  double _getEffectiveUnitPrice(Map<String, dynamic> item) {
+    final basePrice = item['unitPrice'] as double;
+    
+    // Check if item is bulk-eligible
+    if (!_isBulkEligible(item)) {
+      return basePrice;
+    }
+
+    // Get total quantity of bulk-eligible items
+    final totalBulkQty = _getBulkEligibleQuantity();
+    
+    // Apply bulk pricing if >= 2 items
+    if (totalBulkQty >= 2) {
+      final productData = item['productData'] as Map<String, dynamic>;
+      final categoryCode = productData['categoryCode'] as String;
+      
+      // Get bulk pricing from stored category data (should be loaded when item was added)
+      final bulkPricing = productData['bulkPricing'] as Map<String, dynamic>?;
+      
+      if (bulkPricing != null) {
+        // Apply appropriate tier
+        if (totalBulkQty >= 5 && bulkPricing['qty5Plus'] != null) {
+          return (bulkPricing['qty5Plus'] as num).toDouble();
+        } else if (totalBulkQty >= 2 && bulkPricing['qty2'] != null) {
+          return (bulkPricing['qty2'] as num).toDouble();
+        }
+      }
+    }
+    
+    return basePrice;
+  }
+
   double get _subtotal {
     return _cartItems.values.fold(0.0, (sum, item) {
       final quantity = item['quantity'] as int;
-      final price = item['unitPrice'] as double;
-      return sum + (quantity * price);
+      final effectivePrice = _getEffectiveUnitPrice(item);
+      return sum + (quantity * effectivePrice);
     });
   }
 
@@ -105,8 +179,9 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
       final name = productData['name'] ?? '';
       final warehouseCode = productData['warehouseCode'] ?? '';
 
-      // Get price (override or category default)
+      // Get price (override or category default) and bulk pricing
       double? price;
+      Map<String, dynamic>? bulkPricing;
       final priceOverride = productData['priceOverride'];
       if (priceOverride != null) {
         price = priceOverride.toDouble();
@@ -119,6 +194,8 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
             if (defaultPrice != null) {
               price = defaultPrice.toDouble();
             }
+            // Store bulk pricing if available (for cuadros 20x30 and 15x30)
+            bulkPricing = categoryDoc['bulkPricing'] as Map<String, dynamic>?;
           }
         }
       }
@@ -167,6 +244,12 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
             );
           }
         } else {
+          // Enrich productData with bulkPricing if available
+          final enrichedProductData = Map<String, dynamic>.from(productData);
+          if (bulkPricing != null) {
+            enrichedProductData['bulkPricing'] = bulkPricing;
+          }
+          
           _cartItems[barcode] = {
             'barcode': barcode,
             'name': name,
@@ -174,7 +257,7 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
             'quantity': 1,
             'unitPrice': price,
             'maxStock': currentStock,
-            'productData': productData,
+            'productData': enrichedProductData,
           };
         }
       });
@@ -219,8 +302,9 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
         onProductSelected: (productData) async {
           final barcode = productData['barcode'] as String;
 
-          // Get price (override or category default)
+          // Get price (override or category default) and bulk pricing
           double? price;
+          Map<String, dynamic>? bulkPricing;
           final priceOverride = productData['priceOverride'];
           if (priceOverride != null) {
             price = priceOverride.toDouble();
@@ -234,6 +318,8 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                 if (defaultPrice != null) {
                   price = defaultPrice.toDouble();
                 }
+                // Store bulk pricing if available
+                bulkPricing = categoryDoc['bulkPricing'] as Map<String, dynamic>?;
               }
             }
           }
@@ -267,6 +353,12 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
             if (_cartItems.containsKey(barcode)) {
               _cartItems[barcode]!['quantity']++;
             } else {
+              // Enrich productData with bulkPricing if available
+              final enrichedProductData = Map<String, dynamic>.from(productData);
+              if (bulkPricing != null) {
+                enrichedProductData['bulkPricing'] = bulkPricing;
+              }
+              
               _cartItems[barcode] = {
                 'barcode': barcode,
                 'name': productData['name'] ?? '',
@@ -274,7 +366,7 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                 'quantity': 1,
                 'unitPrice': price,
                 'maxStock': currentStock,
-                'productData': productData,
+                'productData': enrichedProductData,
               };
             }
           });
@@ -282,6 +374,29 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
         },
       ),
     );
+  }
+
+  void _updateQuantity(String barcode, String value, int currentQty, int maxStock) {
+    final newQty = int.tryParse(value) ?? currentQty;
+    if (newQty > 0 && newQty <= maxStock) {
+      setState(() {
+        _cartItems[barcode]!['quantity'] = newQty;
+      });
+    } else if (newQty > maxStock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Stock máximo: $maxStock'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      setState(() {
+        _cartItems[barcode]!['quantity'] = maxStock;
+      });
+    } else {
+      setState(() {
+        _cartItems[barcode]!['quantity'] = 1;
+      });
+    }
   }
 
   Future<void> _createSale() async {
@@ -345,6 +460,18 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
       return;
     }
 
+    // Validate bank account for non-cash payments
+    if ((_paymentMethod == 'transferencia' || _paymentMethod == 'tarjeta') &&
+        _selectedBankAccount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona una cuenta bancaria'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isCreatingSale = true;
     });
@@ -378,6 +505,9 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
         'saleType': _saleType,
         'deliveryMethod': _saleType == 'delivery' ? _deliveryMethod : null,
         'paymentMethod': _paymentMethod,
+        'destinationAccount': (_paymentMethod == 'transferencia' || _paymentMethod == 'tarjeta') 
+            ? _selectedBankAccount 
+            : null,
         'items': items,
         'subtotal': _subtotal,
         'discount': _discount,
@@ -448,42 +578,63 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
       await batch.commit();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
+        // Show success dialog with options
+        final shouldStay = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Row(
               children: [
-                const Icon(Icons.check_circle_outline_rounded,
-                    color: AppTheme.white),
+                const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 28),
                 const SizedBox(width: AppTheme.spacingM),
-                Expanded(
-                  child: Text(
-                    requiresApproval
-                        ? 'Venta creada - Pendiente de aprobación'
-                        : 'Venta registrada exitosamente',
-                    style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
-                  ),
+                Text(
+                  'Venta Registrada con Éxito',
+                  style: AppTheme.heading3,
                 ),
               ],
             ),
-            backgroundColor: AppTheme.success,
-            behavior: SnackBarBehavior.floating,
+            content: Text(
+              requiresApproval
+                  ? 'Venta creada exitosamente. Está pendiente de aprobación de pago.'
+                  : 'Venta registrada exitosamente.',
+              style: AppTheme.bodyMedium,
+            ),
+            actions: [
+              OutlinedButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Regresar'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context, true),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Registrar Nueva Venta'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.blue,
+                ),
+              ),
+            ],
           ),
         );
 
-        // Clear form
-        setState(() {
-          _cartItems.clear();
-          _customerNameController.clear();
-          _customerPhoneController.clear();
-          _deliveryAddressController.clear();
-          _nitController.text = 'CF';
-          _discountController.text = '0';
-          _saleType = 'kiosko';
-          _deliveryMethod = null;
-          _paymentMethod = 'efectivo';
-          _deductFrom = 'store';
-        });
-        _barcodeFocusNode.requestFocus();
+        if (shouldStay == true) {
+          // Clear form for new sale
+          setState(() {
+            _cartItems.clear();
+            _customerNameController.clear();
+            _customerPhoneController.clear();
+            _deliveryAddressController.clear();
+            _nitController.text = 'CF';
+            _discountController.text = '0';
+            _saleType = widget.initialSaleType ?? 'kiosko';
+            _deliveryMethod = null;
+            _paymentMethod = 'efectivo';
+            _deductFrom = 'store';
+          });
+          _barcodeFocusNode.requestFocus();
+        } else {
+          // Go back
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -835,11 +986,134 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
   Widget _buildStockSourceOption(String value, String label) {
     final isSelected = _deductFrom == value;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _deductFrom = value;
-          _cartItems.clear(); // Clear cart when changing stock source
-        });
+      onTap: () async {
+        // Validate cart items against new stock source
+        final stockField = value == 'store' ? 'stockStore' : 'stockWarehouse';
+        final List<String> insufficientStockItems = [];
+        final Map<String, int> adjustedQuantities = {};
+
+        for (var entry in _cartItems.entries) {
+          final barcode = entry.key;
+          final item = entry.value;
+          final productData = item['productData'] as Map<String, dynamic>;
+          final availableStock = productData[stockField] ?? 0;
+          final currentQty = item['quantity'] as int;
+
+          if (availableStock <= 0) {
+            insufficientStockItems.add(item['name']);
+          } else if (currentQty > availableStock) {
+            adjustedQuantities[barcode] = availableStock;
+          }
+        }
+
+        // Show warning if items have insufficient stock
+        if (insufficientStockItems.isNotEmpty && mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Stock Insuficiente'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Los siguientes productos no tienen stock en ${value == 'store' ? 'tienda' : 'bodega'}:',
+                    style: AppTheme.bodySmall,
+                  ),
+                  const SizedBox(height: AppTheme.spacingM),
+                  ...insufficientStockItems.map((name) => Padding(
+                        padding: const EdgeInsets.only(
+                            bottom: AppTheme.spacingXS),
+                        child: Text('• $name',
+                            style: AppTheme.bodySmall.copyWith(
+                                color: AppTheme.danger)),
+                      )),
+                  if (adjustedQuantities.isNotEmpty) ...[
+                    const SizedBox(height: AppTheme.spacingM),
+                    Text(
+                      'Algunos productos tendrán cantidades ajustadas al stock disponible.',
+                      style: AppTheme.bodySmall
+                          .copyWith(color: AppTheme.warning),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      _deductFrom = value;
+                      // Remove items with no stock
+                      for (var name in insufficientStockItems) {
+                        _cartItems.removeWhere(
+                            (key, item) => item['name'] == name);
+                      }
+                      // Adjust quantities for items with limited stock
+                      for (var entry in adjustedQuantities.entries) {
+                        if (_cartItems.containsKey(entry.key)) {
+                          _cartItems[entry.key]!['quantity'] = entry.value;
+                          _cartItems[entry.key]!['maxStock'] = entry.value;
+                        }
+                      }
+                    });
+                  },
+                  child: const Text('Continuar'),
+                ),
+              ],
+            ),
+          );
+        } else if (adjustedQuantities.isNotEmpty && mounted) {
+          // Only quantity adjustments, no items removed
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Ajuste de Cantidades'),
+              content: Text(
+                'Algunos productos tienen cantidades mayores al stock disponible en ${value == 'store' ? 'tienda' : 'bodega'}. Las cantidades serán ajustadas automáticamente.',
+                style: AppTheme.bodySmall,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      _deductFrom = value;
+                      // Adjust quantities
+                      for (var entry in adjustedQuantities.entries) {
+                        if (_cartItems.containsKey(entry.key)) {
+                          _cartItems[entry.key]!['quantity'] = entry.value;
+                          _cartItems[entry.key]!['maxStock'] = entry.value;
+                        }
+                      }
+                    });
+                  },
+                  child: const Text('Ajustar'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          // No issues, just change the source
+          setState(() {
+            _deductFrom = value;
+            // Update maxStock for all items
+            for (var entry in _cartItems.entries) {
+              final productData =
+                  entry.value['productData'] as Map<String, dynamic>;
+              final availableStock = productData[stockField] ?? 0;
+              _cartItems[entry.key]!['maxStock'] = availableStock;
+            }
+          });
+        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(
@@ -912,9 +1186,13 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
     final name = item['name'] as String;
     final warehouseCode = item['warehouseCode'] as String;
     final quantity = item['quantity'] as int;
-    final unitPrice = item['unitPrice'] as double;
+    final baseUnitPrice = item['unitPrice'] as double;
+    final effectiveUnitPrice = _getEffectiveUnitPrice(item);
     final maxStock = item['maxStock'] as int;
-    final subtotal = quantity * unitPrice;
+    final subtotal = quantity * effectiveUnitPrice;
+    
+    // Check if bulk pricing is applied
+    final isBulkPriced = _isBulkEligible(item) && effectiveUnitPrice != baseUnitPrice;
 
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingM),
@@ -941,8 +1219,50 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                 Text(name.isNotEmpty ? name : warehouseCode,
                     style: AppTheme.bodyMedium
                         .copyWith(fontWeight: FontWeight.w600)),
-                Text('$barcode • Q${unitPrice.toStringAsFixed(2)} c/u',
-                    style: AppTheme.bodySmall),
+                if (isBulkPriced) ...[
+                  Text('$barcode',
+                      style: AppTheme.bodySmall),
+                  Row(
+                    children: [
+                      Text(
+                        'Q${baseUnitPrice.toStringAsFixed(2)}',
+                        style: AppTheme.bodySmall.copyWith(
+                          decoration: TextDecoration.lineThrough,
+                          color: AppTheme.mediumGray,
+                        ),
+                      ),
+                      const SizedBox(width: AppTheme.spacingXS),
+                      Text(
+                        'Q${effectiveUnitPrice.toStringAsFixed(2)} c/u',
+                        style: AppTheme.bodySmall.copyWith(
+                          color: AppTheme.success,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: AppTheme.spacingXS),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.success.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'MAYOREO',
+                          style: AppTheme.bodySmall.copyWith(
+                            fontSize: 9,
+                            color: AppTheme.success,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else
+                  Text('$barcode • Q${effectiveUnitPrice.toStringAsFixed(2)} c/u',
+                      style: AppTheme.bodySmall),
                 Text('Subtotal: Q${subtotal.toStringAsFixed(2)}',
                     style: AppTheme.bodySmall
                         .copyWith(fontWeight: FontWeight.w600)),
@@ -960,19 +1280,42 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                   }
                 : null,
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spacingM,
-              vertical: AppTheme.spacingS,
+          SizedBox(
+            width: 60,
+            child: Builder(
+              builder: (context) {
+                final controller = TextEditingController(text: '$quantity')
+                  ..selection = TextSelection.fromPosition(
+                    TextPosition(offset: '$quantity'.length),
+                  );
+                
+                return TextField(
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: AppTheme.spacingS,
+                      vertical: AppTheme.spacingS,
+                    ),
+                  ),
+                  style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                  onTapOutside: (event) {
+                    _updateQuantity(barcode, controller.text, quantity, maxStock);
+                    FocusScope.of(context).unfocus();
+                  },
+                  onEditingComplete: () {
+                    _updateQuantity(barcode, controller.text, quantity, maxStock);
+                    FocusScope.of(context).unfocus();
+                  },
+                  onSubmitted: (value) {
+                    _updateQuantity(barcode, value, quantity, maxStock);
+                  },
+                );
+              }
             ),
-            decoration: BoxDecoration(
-              color: AppTheme.white,
-              borderRadius: AppTheme.borderRadiusSmall,
-              border: Border.all(color: AppTheme.lightGray),
-            ),
-            child: Text('$quantity',
-                style:
-                    AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
           ),
           IconButton(
             icon: const Icon(Icons.add_circle_outline_rounded,
@@ -1126,6 +1469,40 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
             _buildPaymentMethod(
                 'tarjeta', 'Tarjeta (POS)', Icons.credit_card_rounded),
           ],
+          // Bank account selector for non-cash payments
+          if (_paymentMethod == 'transferencia' || _paymentMethod == 'tarjeta') ...[
+            const SizedBox(height: AppTheme.spacingL),
+            Text('Cuenta Bancaria', style: AppTheme.bodyLarge.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: AppTheme.spacingM),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingM),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppTheme.lightGray),
+                borderRadius: AppTheme.borderRadiusSmall,
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: _selectedBankAccount,
+                  hint: const Text('Selecciona cuenta bancaria'),
+                  items: _bankAccounts.map<DropdownMenuItem<String>>((account) {
+                    final accountName = account['accountName'] as String;
+                    final bankName = account['bankName'] as String;
+                    final last4 = account['last4Digits'] as String;
+                    return DropdownMenuItem<String>(
+                      value: account['id'],
+                      child: Text('$accountName - $bankName (*$last4)'),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedBankAccount = value;
+                    });
+                  },
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1149,6 +1526,10 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
       onTap: () {
         setState(() {
           _paymentMethod = value;
+          // Reset bank account selection when switching to efectivo
+          if (value == 'efectivo') {
+            _selectedBankAccount = null;
+          }
         });
       },
       child: Container(

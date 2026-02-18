@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/services/expenses_service.dart';
 import 'package:xepi_imgadmin/services/auth_service.dart';
+import 'package:xepi_imgadmin/services/bank_accounts_service.dart';
 
 class ExpensesListScreen extends StatefulWidget {
   const ExpensesListScreen({super.key});
@@ -12,7 +13,9 @@ class ExpensesListScreen extends StatefulWidget {
 }
 
 class _ExpensesListScreenState extends State<ExpensesListScreen> {
+  final BankAccountsService _bankAccountsService = BankAccountsService();
   List<Map<String, dynamic>> _expenses = [];
+  List<Map<String, dynamic>> _bankAccounts = [];
   String _filterType = 'todos';
   String _filterStatus = 'todos';
   bool _loading = true;
@@ -21,6 +24,18 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
   void initState() {
     super.initState();
     _loadExpenses();
+    _loadBankAccounts();
+  }
+
+  Future<void> _loadBankAccounts() async {
+    try {
+      final accounts = await _bankAccountsService.getActiveAccounts();
+      setState(() {
+        _bankAccounts = accounts;
+      });
+    } catch (e) {
+      // Silent fail - defaults to empty list
+    }
   }
 
   Future<void> _loadExpenses() async {
@@ -165,6 +180,8 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
   }
 
   Widget _buildExpenseRow(Map<String, dynamic> e) {
+    final paymentSource = e['paymentSource'] as String?;
+    
     return Container(
       margin: const EdgeInsets.only(bottom: AppTheme.spacingS),
       padding: const EdgeInsets.all(AppTheme.spacingM),
@@ -209,6 +226,36 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(e['description'] as String, style: AppTheme.bodyMedium),
+                if (paymentSource != null) ...[
+                  const SizedBox(height: 4),
+                  if (paymentSource == 'efectivo')
+                    Text(
+                      'Pagado en efectivo',
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.success,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    )
+                  else
+                    FutureBuilder<Map<String, dynamic>?>(
+                      future: _bankAccountsService.getBankAccount(paymentSource),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData && snapshot.data != null) {
+                          final account = snapshot.data!;
+                          final accountName = account['accountName'] as String? ?? '';
+                          final last4 = account['last4Digits'] as String? ?? '';
+                          return Text(
+                            'Pagado desde: $accountName (*$last4)',
+                            style: AppTheme.bodySmall.copyWith(
+                              color: AppTheme.blue,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                ],
               ],
             ),
           ),
@@ -258,6 +305,7 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
     final descCtrl = TextEditingController();
     String category = 'Suministros de tienda';
     String type = 'operativo';
+    String? selectedPaymentSource = 'efectivo';
 
     showDialog(
       context: context,
@@ -299,6 +347,26 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
                 onChanged: (v) => type = v ?? 'operativo',
               ),
               const SizedBox(height: AppTheme.spacingM),
+              DropdownButtonFormField<String>(
+                value: selectedPaymentSource,
+                decoration: const InputDecoration(labelText: 'Método de Pago'),
+                items: [
+                  const DropdownMenuItem(
+                    value: 'efectivo',
+                    child: Text('Efectivo'),
+                  ),
+                  ..._bankAccounts.map((account) {
+                    final accountName = account['accountName'] as String;
+                    final last4 = account['last4Digits'] as String;
+                    return DropdownMenuItem(
+                      value: account['id'],
+                      child: Text('$accountName (*$last4)'),
+                    );
+                  }),
+                ],
+                onChanged: (v) => selectedPaymentSource = v,
+              ),
+              const SizedBox(height: AppTheme.spacingM),
               TextField(
                 controller: amountCtrl,
                 keyboardType: TextInputType.number,
@@ -335,6 +403,7 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
                 categoryType: type,
                 description: descCtrl.text.trim(),
                 createdBy: AuthService.currentUser?.uid ?? 'unknown',
+                paymentSource: selectedPaymentSource ?? 'efectivo',
               );
               if (context.mounted) Navigator.pop(context);
               await _loadExpenses();

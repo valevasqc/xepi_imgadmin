@@ -98,6 +98,13 @@ service cloud.firestore {
       allow write: if isSuperuser();
     }
     
+    // Bank Accounts - Superuser only (sensitive financial data)
+    match /bankAccounts/{accountId} {
+      allow read, write: if isAuthenticated() && 
+        (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
+         request.auth.uid == 'yMnQBCQrtpblH3yTHd05XLVloZu2');
+    }
+    
     // Notifications - Authenticated only
     match /notifications/{notificationId} {
       allow read, write: if isAuthenticated();

@@ -152,20 +152,23 @@ class _ShipmentHistoryScreenState extends State<ShipmentHistoryScreen> {
                                 vertical: AppTheme.spacingS,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.white,
+                                color: AppTheme.backgroundGray,
                                 borderRadius: AppTheme.borderRadiusSmall,
-                                border: Border.all(color: AppTheme.lightGray),
                               ),
                               child: Row(
                                 children: [
+                                  const Icon(
+                                    Icons.inventory_2_rounded,
+                                    color: AppTheme.mediumGray,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: AppTheme.spacingS),
                                   Text(
                                     '${_shipments.length} recepciones',
-                                    style: AppTheme.bodyMedium,
-                                  ),
-                                  const SizedBox(width: AppTheme.spacingM),
-                                  const Icon(
-                                    Icons.filter_list_rounded,
-                                    color: AppTheme.mediumGray,
+                                    style: AppTheme.bodyMedium.copyWith(
+                                      color: AppTheme.darkGray,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ],
                               ),

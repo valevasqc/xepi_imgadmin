@@ -696,6 +696,49 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     }
   }
 
+  List<Widget> _buildQuickActions() {
+    final saleType = _saleData!['saleType'] as String;
+    if (saleType != 'delivery') return [];
+
+    final deliveryStatus = _saleData!['deliveryStatus'] as String? ?? 'pending';
+    
+    if (deliveryStatus == 'pending') {
+      return [
+        FilledButton.icon(
+          onPressed: _isProcessing ? null : () => _updateDeliveryStatus('picked_up'),
+          icon: const Icon(Icons.local_shipping_rounded, size: 18),
+          label: const Text('Marcar Recogido'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppTheme.blue,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.spacingM,
+              vertical: AppTheme.spacingS,
+            ),
+          ),
+        ),
+        const SizedBox(width: AppTheme.spacingM),
+      ];
+    } else if (deliveryStatus == 'picked_up') {
+      return [
+        FilledButton.icon(
+          onPressed: _isProcessing ? null : () => _updateDeliveryStatus('delivered'),
+          icon: const Icon(Icons.home_rounded, size: 18),
+          label: const Text('Marcar Entregado'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppTheme.success,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.spacingM,
+              vertical: AppTheme.spacingS,
+            ),
+          ),
+        ),
+        const SizedBox(width: AppTheme.spacingM),
+      ];
+    }
+    
+    return [];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -721,6 +764,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 const SizedBox(width: AppTheme.spacingM),
                 Text('Detalle de Venta', style: AppTheme.heading1),
                 const Spacer(),
+                if (!_isLoading && _saleData != null) ..._buildQuickActions(),
                 if (!_isLoading && _saleData != null)
                   IconButton(
                     onPressed: _isProcessing ? null : _showActionsMenu,

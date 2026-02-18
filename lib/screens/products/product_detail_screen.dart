@@ -445,7 +445,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
         // Load category data if not loaded (async, doesn't block UI)
         if (product['categoryCode'] != null && _categoriesLoaded) {
-          _loadCategoryData(product['categoryCode']);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _loadCategoryData(product['categoryCode']);
+          });
         }
 
         return _buildProductDetail(product, images, isActive);
@@ -1150,6 +1152,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               borderRadius: AppTheme.borderRadiusSmall,
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(
                   Icons.attach_money_rounded,
@@ -1160,6 +1163,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         'Precio Actual',
@@ -1167,12 +1171,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           color: AppTheme.mediumGray,
                           fontSize: 11,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         'Q${_getCurrentPrice(product)}',
                         style: AppTheme.heading3.copyWith(
                           color: AppTheme.blue,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -1217,7 +1223,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           hintText: _categoryData != null
                               ? 'Q${_categoryData!['defaultPrice'] ?? '0.00'} (por defecto)'
                               : 'Vacío = precio de categoría',
-                          prefixText: 'Q',
                           suffixIcon: product['priceOverride'] != null
                               ? IconButton(
                                   icon: const Icon(Icons.restore_rounded,
@@ -1257,7 +1262,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         controller: _costPriceController,
                         decoration: const InputDecoration(
                           hintText: 'Costo del producto (opcional)',
-                          prefixText: 'Q',
+                          prefixText: 'Q ',
                         ),
                         keyboardType: TextInputType.number,
                         inputFormatters: [

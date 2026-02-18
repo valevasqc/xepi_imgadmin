@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/services/auth_service.dart';
-import 'package:xepi_imgadmin/screens/add_product_screen.dart';
+import 'package:xepi_imgadmin/screens/products/add_product_screen.dart';
 import 'package:xepi_imgadmin/widgets/product_search_dialog.dart';
 import 'package:xepi_imgadmin/utils/date_formatter.dart';
 

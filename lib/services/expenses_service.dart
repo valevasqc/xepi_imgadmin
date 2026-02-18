@@ -65,6 +65,7 @@ class ExpensesService {
     required String createdBy,
     String? receiptUrl,
     String status = 'pending_approval',
+    String paymentSource = 'efectivo',
   }) async {
     await _db.collection('expenses').add({
       'amount': amount,
@@ -74,6 +75,7 @@ class ExpensesService {
       'receiptUrl': receiptUrl,
       'status': status,
       'createdBy': createdBy,
+      'paymentSource': paymentSource,
       'createdAt': FieldValue.serverTimestamp(),
       'approvedBy': null,
       'approvedAt': null,

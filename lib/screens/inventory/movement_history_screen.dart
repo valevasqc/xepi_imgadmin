@@ -46,7 +46,7 @@ class _MovementHistoryScreenState extends State<MovementHistoryScreen> {
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Nuevo Traslado'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.orange,
+                    backgroundColor: AppTheme.blue,
                     padding: const EdgeInsets.symmetric(
                         horizontal: AppTheme.spacingL,
                         vertical: AppTheme.spacingM),

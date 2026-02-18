@@ -65,12 +65,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     controller: _emailController,
                     decoration: const InputDecoration(labelText: 'Correo electrónico'),
                     keyboardType: TextInputType.emailAddress,
+                    onSubmitted: (_) => _login(),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _passwordController,
                     decoration: const InputDecoration(labelText: 'Contraseña'),
                     obscureText: true,
+                    onSubmitted: (_) => _login(),
                   ),
                   const SizedBox(height: 24),
                   if (_errorMessage.isNotEmpty)

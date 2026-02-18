@@ -765,51 +765,23 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
             // Quick action button for delivery progression (or arrow)
             if (isDelivery && deliveryStatus == 'pending')
-              AbsorbPointer(
-                absorbing: false,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Tooltip(
-                    message: 'Marcar como Recogido',
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () {
-                          _quickUpdateDeliveryStatus(saleId, 'picked_up');
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.all(AppTheme.spacingS),
-                          child: const Icon(Icons.local_shipping_rounded,
-                              color: AppTheme.blue),
-                        ),
-                      ),
-                    ),
-                  ),
+              IconButton(
+                onPressed: () => _quickUpdateDeliveryStatus(saleId, 'picked_up'),
+                icon: const Icon(Icons.local_shipping_rounded),
+                tooltip: 'Marcar como Recogido',
+                color: AppTheme.blue,
+                style: IconButton.styleFrom(
+                  backgroundColor: AppTheme.blue.withValues(alpha: 0.1),
                 ),
               )
             else if (isDelivery && deliveryStatus == 'picked_up')
-              AbsorbPointer(
-                absorbing: false,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Tooltip(
-                    message: 'Marcar como Entregado',
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () {
-                          _quickUpdateDeliveryStatus(saleId, 'delivered');
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.all(AppTheme.spacingS),
-                          child: const Icon(Icons.home_rounded,
-                              color: AppTheme.success),
-                        ),
-                      ),
-                    ),
-                  ),
+              IconButton(
+                onPressed: () => _quickUpdateDeliveryStatus(saleId, 'delivered'),
+                icon: const Icon(Icons.home_rounded),
+                tooltip: 'Marcar como Entregado',
+                color: AppTheme.success,
+                style: IconButton.styleFrom(
+                  backgroundColor: AppTheme.success.withValues(alpha: 0.1),
                 ),
               )
             else

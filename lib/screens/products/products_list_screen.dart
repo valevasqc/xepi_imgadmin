@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
-import 'package:xepi_imgadmin/screens/product_detail_screen.dart';
-import 'package:xepi_imgadmin/screens/add_product_screen.dart';
+import 'package:xepi_imgadmin/screens/products/product_detail_screen.dart';
+import 'package:xepi_imgadmin/screens/products/add_product_screen.dart';
 
 enum ViewMode { cards, table, list }
 

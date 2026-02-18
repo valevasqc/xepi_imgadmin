@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
+import 'package:xepi_imgadmin/services/bank_accounts_service.dart';
 import 'package:intl/intl.dart';
 import 'dart:typed_data';
 
@@ -19,16 +20,54 @@ class _DepositsScreenState extends State<DepositsScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final ImagePicker _imagePicker = ImagePicker();
+  final BankAccountsService _bankAccountsService = BankAccountsService();
 
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
   String _selectedSource = 'store';
+  String? _selectedBankAccount;
+  List<Map<String, dynamic>> _bankAccounts = [];
   Uint8List? _imageBytes;
   String? _imageFileName;
   bool _isProcessing = false;
+  bool _isLoadingAccounts = true;
+  
+  // Employee expenses paid from cash before deposit
+  List<Map<String, dynamic>> _expenses = [];
 
   final _currencyFormat = NumberFormat.currency(symbol: 'Q', decimalDigits: 2);
   final _dateFormat = DateFormat('dd/MM/yyyy HH:mm');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBankAccounts();
+  }
+
+  Future<void> _loadBankAccounts() async {
+    try {
+      final accounts = await _bankAccountsService.getActiveAccounts();
+      final qtzAccounts = accounts.where((a) => a['currency'] == 'QTZ').toList();
+      setState(() {
+        _bankAccounts = qtzAccounts;
+        _isLoadingAccounts = false;
+        // Set default to BI Personal if available
+        if (qtzAccounts.isNotEmpty) {
+          _selectedBankAccount = qtzAccounts.first['id'];
+        }
+      });
+    } catch (e) {
+      setState(() => _isLoadingAccounts = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar cuentas bancarias: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -139,18 +178,35 @@ class _DepositsScreenState extends State<DepositsScreen> {
     if (_amountController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Ingresa el monto del depósito'),
+          content: Text('Ingresa el efectivo recibido'),
           backgroundColor: AppTheme.warning,
         ),
       );
       return;
     }
 
-    final amount = double.tryParse(_amountController.text);
-    if (amount == null || amount <= 0) {
+    final cashReceived = double.tryParse(_amountController.text);
+    if (cashReceived == null || cashReceived <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Ingresa un monto válido'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+
+    // Calculate net deposit amount
+    final totalExpenses = _expenses.fold<double>(
+      0,
+      (sum, expense) => sum + (expense['amount'] as double),
+    );
+    final netDepositAmount = cashReceived - totalExpenses;
+
+    if (netDepositAmount < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Los gastos no pueden ser mayores al efectivo recibido'),
           backgroundColor: AppTheme.warning,
         ),
       );
@@ -161,6 +217,16 @@ class _DepositsScreenState extends State<DepositsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Adjunta el comprobante del depósito'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedBankAccount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona la cuenta bancaria del depósito'),
           backgroundColor: AppTheme.warning,
         ),
       );
@@ -196,8 +262,8 @@ class _DepositsScreenState extends State<DepositsScreen> {
 
       List<String> selectedSaleIds;
 
-      // Check if amounts match
-      if ((amount - pendingAmount).abs() < 0.01) {
+      // Check if amounts match (compare with cash received, not net deposit)
+      if ((cashReceived - pendingAmount).abs() < 0.01) {
         // Perfect match - link all pending sales automatically
         selectedSaleIds = pendingSaleIds;
       } else {
@@ -207,7 +273,7 @@ class _DepositsScreenState extends State<DepositsScreen> {
         final result = await _showManualSaleSelectionDialog(
           pendingSaleIds,
           pendingAmount,
-          amount,
+          cashReceived,
         );
 
         if (result == null) {
@@ -218,7 +284,7 @@ class _DepositsScreenState extends State<DepositsScreen> {
         selectedSaleIds = result;
         setState(() => _isProcessing = true);
 
-        // Validate: Load selected sales and verify total matches deposit amount
+        // Validate: Load selected sales and verify total matches cash received
         final selectedSaleDocs = await Future.wait(
           selectedSaleIds
               .map((id) => _firestore.collection('sales').doc(id).get()),
@@ -308,8 +374,8 @@ class _DepositsScreenState extends State<DepositsScreen> {
           return;
         }
 
-        // Check if selected sales total matches deposit amount
-        if ((selectedTotal - amount).abs() > 0.01) {
+        // Check if selected sales total matches cash received
+        if ((selectedTotal - cashReceived).abs() > 0.01) {
           setState(() => _isProcessing = false);
           if (!mounted) return;
 
@@ -322,7 +388,7 @@ class _DepositsScreenState extends State<DepositsScreen> {
                   const SizedBox(width: AppTheme.spacingM),
                   Expanded(
                     child: Text(
-                      'Error: Las ventas seleccionadas suman Q${selectedTotal.toStringAsFixed(2)}, pero el depósito es Q${amount.toStringAsFixed(2)}. Los montos deben coincidir.',
+                      'Error: Las ventas seleccionadas suman Q${selectedTotal.toStringAsFixed(2)}, pero el efectivo recibido es Q${cashReceived.toStringAsFixed(2)}. Los montos deben coincidir.',
                       style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
                     ),
                   ),
@@ -360,12 +426,38 @@ class _DepositsScreenState extends State<DepositsScreen> {
 
       final batch = _firestore.batch();
 
-      // Create deposit
+      // Create expense records if any
+      final expenseIds = <String>[];
+      for (final expense in _expenses) {
+        final expenseRef = _firestore.collection('expenses').doc();
+        expenseIds.add(expenseRef.id);
+        
+        batch.set(expenseRef, {
+          'amount': expense['amount'],
+          'category': expense['category'],
+          'categoryType': 'operativo',
+          'description': expense['description'],
+          'paymentSource': 'efectivo',
+          'receiptUrl': null,
+          'status': 'approved', // Auto-approved for employee cash expenses
+          'createdBy': user.uid,
+          'createdAt': FieldValue.serverTimestamp(),
+          'approvedBy': user.uid,
+          'approvedAt': FieldValue.serverTimestamp(),
+          'depositId': depositId, // Link to deposit
+        });
+      }
+
+      // Create deposit (with NET amount after expenses)
       batch.set(depositRef, {
         'source': _selectedSource,
-        'amount': amount,
+        'amount': netDepositAmount, // Net amount deposited
+        'cashReceived': cashReceived, // Original cash amount
+        'expenses': totalExpenses, // Total expenses deducted
+        'expenseIds': expenseIds, // Links to expense records
         'saleIds': selectedSaleIds,
         'comprobanteUrl': imageUrl,
+        'destinationAccount': _selectedBankAccount,
         'notes': _notesController.text.trim(),
         'depositedBy': user.uid,
         'depositedAt': FieldValue.serverTimestamp(),
@@ -391,11 +483,11 @@ class _DepositsScreenState extends State<DepositsScreen> {
         }
       }
 
-      // Update pending cash: deduct amount and remove linked saleIds
+      // Update pending cash: deduct cash received (not net deposit) and remove linked saleIds
       final remainingSaleIds =
           pendingSaleIds.where((id) => !selectedSaleIds.contains(id)).toList();
 
-      final remainingAmount = pendingAmount - amount;
+      final remainingAmount = pendingAmount - cashReceived;
 
       if (remainingSaleIds.isEmpty || remainingAmount <= 0.01) {
         // Clear pending cash completely
@@ -424,7 +516,9 @@ class _DepositsScreenState extends State<DepositsScreen> {
                 const SizedBox(width: AppTheme.spacingM),
                 Expanded(
                   child: Text(
-                    'Depósito registrado${selectedSaleIds.length > 1 ? ' (${selectedSaleIds.length} ventas vinculadas)' : ''}',
+                    _expenses.isEmpty
+                      ? 'Depósito registrado${selectedSaleIds.length > 1 ? ' (${selectedSaleIds.length} ventas vinculadas)' : ''}'
+                      : 'Depósito registrado (${_expenses.length} gastos deducidos)',
                   ),
                 ),
               ],
@@ -441,6 +535,7 @@ class _DepositsScreenState extends State<DepositsScreen> {
           _imageBytes = null;
           _imageFileName = null;
           _selectedSource = 'store';
+          _expenses.clear(); // Clear expenses list
         });
       }
     } catch (e) {
@@ -718,16 +813,125 @@ class _DepositsScreenState extends State<DepositsScreen> {
           ),
           const SizedBox(height: AppTheme.spacingL),
 
-          // Amount input
-          TextField(
-            controller: _amountController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Monto Depositado',
-              prefixText: 'Q ',
-              border: OutlineInputBorder(),
+          // Bank Account Selector
+          Text('Cuenta Bancaria de Destino', style: AppTheme.bodyLarge),
+          const SizedBox(height: AppTheme.spacingS),
+          if (_isLoadingAccounts)
+            const Center(child: CircularProgressIndicator())
+          else if (_bankAccounts.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingL),
+              decoration: BoxDecoration(
+                color: AppTheme.warning.withValues(alpha: 0.1),
+                borderRadius: AppTheme.borderRadiusSmall,
+                border: Border.all(color: AppTheme.warning),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_rounded, color: AppTheme.warning),
+                  const SizedBox(width: AppTheme.spacingM),
+                  Expanded(
+                    child: Text(
+                      'No hay cuentas bancarias activas. Agrega una cuenta primero.',
+                      style: AppTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacingM,
+                vertical: AppTheme.spacingXS,
+              ),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppTheme.lightGray),
+                borderRadius: AppTheme.borderRadiusSmall,
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedBankAccount,
+                  isExpanded: true,
+                  hint: const Text('Selecciona cuenta bancaria'),
+                  items: _bankAccounts.map((account) {
+                    final accountName = account['accountName'] as String? ?? '';
+                    final bankName = account['bankName'] as String? ?? '';
+                    final last4 = account['last4Digits'] as String? ?? '';
+                    return DropdownMenuItem<String>(
+                      value: account['id'],
+                      child: Text('$accountName ($bankName *$last4)'),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() => _selectedBankAccount = value);
+                  },
+                ),
+              ),
             ),
+          const SizedBox(height: AppTheme.spacingL),
+
+          // Cash collected input
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _amountController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Efectivo Recibido (Total)',
+                    prefixText: 'Q ',
+                    border: OutlineInputBorder(),
+                    helperText: 'Total de efectivo antes de gastos',
+                  ),
+                  onChanged: (value) => setState(() {}),
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: AppTheme.spacingL),
+
+          // Expenses section
+          _buildExpensesSection(),
+          
+          const SizedBox(height: AppTheme.spacingL),
+
+          // Net deposit calculation
+          if (_amountController.text.isNotEmpty && double.tryParse(_amountController.text) != null)
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingL),
+              decoration: BoxDecoration(
+                color: AppTheme.blue.withValues(alpha: 0.1),
+                borderRadius: AppTheme.borderRadiusSmall,
+                border: Border.all(color: AppTheme.blue),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Monto a Depositar',
+                        style: AppTheme.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.blue,
+                        ),
+                      ),
+                      const SizedBox(height: AppTheme.spacingS),
+                      Text(
+                        'Efectivo recibido - Gastos',
+                        style: AppTheme.caption.copyWith(color: AppTheme.mediumGray),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    _currencyFormat.format(_getNetDepositAmount()),
+                    style: AppTheme.heading2.copyWith(color: AppTheme.blue),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: AppTheme.spacingM),
 
           // Notes
@@ -984,6 +1188,7 @@ class _DepositsScreenState extends State<DepositsScreen> {
                     final depositedAt = data['depositedAt'] as Timestamp?;
                     final notes = data['notes'] as String?;
                     final comprobanteUrl = data['comprobanteUrl'] as String?;
+                    final destinationAccount = data['destinationAccount'] as String?;
 
                     IconData sourceIcon;
                     String sourceName;
@@ -1045,6 +1250,25 @@ class _DepositsScreenState extends State<DepositsScreen> {
                               _dateFormat.format(depositedAt.toDate()),
                               style: AppTheme.bodySmall
                                   .copyWith(color: AppTheme.mediumGray),
+                            ),
+                          if (destinationAccount != null)
+                            FutureBuilder<Map<String, dynamic>?>(
+                              future: _bankAccountsService.getBankAccount(destinationAccount),
+                              builder: (context, accountSnapshot) {
+                                if (accountSnapshot.hasData && accountSnapshot.data != null) {
+                                  final account = accountSnapshot.data!;
+                                  final accountName = account['accountName'] as String? ?? '';
+                                  final last4 = account['last4Digits'] as String? ?? '';
+                                  return Text(
+                                    '$accountName (*$last4)',
+                                    style: AppTheme.bodySmall.copyWith(
+                                      color: AppTheme.blue,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  );
+                                }
+                                return const SizedBox.shrink();
+                              },
                             ),
                           if (notes != null && notes.isNotEmpty)
                             Text(
@@ -1163,6 +1387,228 @@ class _DepositsScreenState extends State<DepositsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  double _getNetDepositAmount() {
+    final cashReceived = double.tryParse(_amountController.text) ?? 0;
+    final totalExpenses = _expenses.fold<double>(
+      0,
+      (sum, expense) => sum + (expense['amount'] as double),
+    );
+    return cashReceived - totalExpenses;
+  }
+
+  Widget _buildExpensesSection() {
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spacingL),
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundGray,
+        borderRadius: AppTheme.borderRadiusSmall,
+        border: Border.all(color: AppTheme.lightGray),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.receipt_rounded, color: AppTheme.orange, size: 20),
+              const SizedBox(width: AppTheme.spacingS),
+              Text(
+                'Gastos del Efectivo',
+                style: AppTheme.bodyLarge.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              if (_expenses.isNotEmpty)
+                Text(
+                  _currencyFormat.format(
+                    _expenses.fold<double>(
+                      0,
+                      (sum, e) => sum + (e['amount'] as double),
+                    ),
+                  ),
+                  style: AppTheme.bodyMedium.copyWith(
+                    color: AppTheme.danger,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacingS),
+          Text(
+            'Si gastaste parte del efectivo (ej: suministros), regístralo aquí',
+            style: AppTheme.caption.copyWith(color: AppTheme.mediumGray),
+          ),
+          const SizedBox(height: AppTheme.spacingM),
+          
+          // Expenses list
+          if (_expenses.isNotEmpty) ...[
+            ..._expenses.asMap().entries.map((entry) {
+              final index = entry.key;
+              final expense = entry.value;
+              return Container(
+                margin: const EdgeInsets.only(bottom: AppTheme.spacingS),
+                padding: const EdgeInsets.all(AppTheme.spacingM),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: AppTheme.borderRadiusSmall,
+                  border: Border.all(color: AppTheme.lightGray),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            expense['category'] as String,
+                            style: AppTheme.bodyMedium.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            expense['description'] as String,
+                            style: AppTheme.bodySmall.copyWith(
+                              color: AppTheme.mediumGray,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: AppTheme.spacingM),
+                    Text(
+                      _currencyFormat.format(expense['amount']),
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: AppTheme.danger,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () {
+                        setState(() {
+                          _expenses.removeAt(index);
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: AppTheme.spacingM),
+          ],
+          
+          // Add expense button
+          OutlinedButton.icon(
+            onPressed: _showAddExpenseDialog,
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Agregar Gasto'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 40),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddExpenseDialog() {
+    final amountCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    String category = 'Suministros de tienda';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Agregar Gasto'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: category,
+                decoration: const InputDecoration(labelText: 'Categoría'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'Suministros de tienda',
+                    child: Text('Suministros de tienda'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Inventarios',
+                    child: Text('Inventarios'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Gastos operativos',
+                    child: Text('Gastos operativos'),
+                  ),
+                ],
+                onChanged: (v) => category = v ?? 'Suministros de tienda',
+              ),
+              const SizedBox(height: AppTheme.spacingM),
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Monto',
+                  prefixText: 'Q ',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: AppTheme.spacingM),
+              TextField(
+                controller: descCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Descripción',
+                  border: OutlineInputBorder(),
+                  hintText: 'Ej: Bolsas, papel, etc.',
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final amount = double.tryParse(amountCtrl.text);
+              if (amount == null || amount <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Ingresa un monto válido'),
+                    backgroundColor: AppTheme.warning,
+                  ),
+                );
+                return;
+              }
+              if (descCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Ingresa una descripción'),
+                    backgroundColor: AppTheme.warning,
+                  ),
+                );
+                return;
+              }
+
+              setState(() {
+                _expenses.add({
+                  'category': category,
+                  'amount': amount,
+                  'description': descCtrl.text.trim(),
+                });
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Agregar'),
+          ),
+        ],
       ),
     );
   }

@@ -397,7 +397,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Text('EFECTIVO PENDIENTE DEPÓSITO', style: AppTheme.heading3),
             const Spacer(),
-            TextButton.icon(
+            FilledButton.icon(
               onPressed: () {
                 Navigator.push(
                   context,
@@ -728,7 +728,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               icon: const Icon(Icons.visibility_rounded),
               label: const Text('Ver Envíos'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.orange,
+                backgroundColor: AppTheme.blue,
               ),
             ),
         ],
