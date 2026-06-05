@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ExpensesService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -82,18 +83,22 @@ class ExpensesService {
     });
   }
 
-  static Future<void> approveExpense(String id, String approvedBy) async {
+  static Future<void> approveExpense(String id) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
     await _db.collection('expenses').doc(id).update({
       'status': 'approved',
-      'approvedBy': approvedBy,
+      'approvedBy': uid,
       'approvedAt': FieldValue.serverTimestamp(),
     });
   }
 
-  static Future<void> rejectExpense(String id, String approvedBy) async {
+  static Future<void> rejectExpense(String id) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
     await _db.collection('expenses').doc(id).update({
       'status': 'rejected',
-      'approvedBy': approvedBy,
+      'approvedBy': uid,
       'approvedAt': FieldValue.serverTimestamp(),
     });
   }

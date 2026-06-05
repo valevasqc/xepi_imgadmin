@@ -344,7 +344,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   fetchedImages.add(
                       MapEntry(productKey.toString(), productValue.toString()));
                 } else {
-                  debugPrint('  ⚠️ FILTERED OUT: $productKey = ${productValue}');
+                  debugPrint('  ⚠️ FILTERED OUT: $productKey = $productValue');
                 }
               });
             } else if (value is List) {
@@ -545,7 +545,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               .length;
         } else if (data is List) {
           // Count only valid entries, not nulls
-          startIndex = (data as List).where((item) => 
+          startIndex = (data).where((item) => 
             item != null && 
             item.toString().trim().isNotEmpty &&
             item.toString().startsWith('http')

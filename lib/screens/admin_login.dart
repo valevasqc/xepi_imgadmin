@@ -14,6 +14,13 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   bool _isLoading = false;
   String _errorMessage = '';
 
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       setState(() {

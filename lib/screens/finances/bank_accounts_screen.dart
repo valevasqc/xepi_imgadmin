@@ -451,7 +451,7 @@ class _BankAccountsScreenState extends State<BankAccountsScreen> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: accountType,
+                            initialValue: accountType,
                             decoration: const InputDecoration(
                               labelText: 'Tipo de Cuenta *',
                             ),
@@ -471,7 +471,7 @@ class _BankAccountsScreenState extends State<BankAccountsScreen> {
                         const SizedBox(width: AppTheme.spacingM),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: currency,
+                            initialValue: currency,
                             decoration: const InputDecoration(
                               labelText: 'Moneda *',
                             ),

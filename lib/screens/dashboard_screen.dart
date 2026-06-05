@@ -5,6 +5,7 @@ import 'package:xepi_imgadmin/screens/finances/deposits_screen.dart';
 import 'package:xepi_imgadmin/screens/sales/sales_history_screen.dart';
 import 'package:xepi_imgadmin/screens/inventory/shipment_history_screen.dart';
 import 'package:xepi_imgadmin/screens/finances/finances_screen.dart';
+import 'package:xepi_imgadmin/screens/sales/register_sale_screen.dart';
 import 'package:intl/intl.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -237,9 +238,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         ElevatedButton.icon(
           onPressed: () {
-            // TODO: Navigate to Register Sale screen
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Registrar Venta - Próximamente')),
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const RegisterSaleScreen()),
             );
           },
           icon: const Icon(Icons.point_of_sale_rounded, size: 20),
@@ -270,10 +272,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         OutlinedButton.icon(
           onPressed: () {
-            // TODO: Navigate to Receive Shipment screen
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('Ver Recepciones en menú Inventario')),
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const ShipmentHistoryScreen()),
             );
           },
           icon: const Icon(Icons.inventory_2_rounded, size: 20),

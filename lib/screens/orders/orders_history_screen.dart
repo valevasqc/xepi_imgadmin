@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
+import 'package:xepi_imgadmin/constants/constants.dart';
+import 'package:xepi_imgadmin/repositories/sales_repository.dart';
 import 'package:xepi_imgadmin/utils/date_formatter.dart';
 import 'package:xepi_imgadmin/utils/status_helper.dart';
 import 'package:xepi_imgadmin/widgets/status_filter_chips.dart';
@@ -438,12 +440,11 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                   cursor: SystemMouseCursors.click,
                   child: Tooltip(
                     message: 'Marcar como Recogido',
-                    // TODO not working
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: () {
-                          _quickUpdateDeliveryStatus(orderId, 'picked_up');
+                          _updateStatus(orderId, DeliveryStatus.pickedUp);
                         },
                         borderRadius: BorderRadius.circular(20),
                         child: Container(
@@ -467,7 +468,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: () {
-                          _quickUpdateDeliveryStatus(orderId, 'delivered');
+                          _updateStatus(orderId, DeliveryStatus.delivered);
                         },
                         borderRadius: BorderRadius.circular(20),
                         child: Container(
@@ -489,74 +490,12 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
     );
   }
 
-  Future<void> _quickUpdateDeliveryStatus(
-      String saleId, String newStatus) async {
+  Future<void> _updateStatus(String saleId, DeliveryStatus newStatus) async {
     try {
-      final saleRef =
-          FirebaseFirestore.instance.collection('sales').doc(saleId);
-      final saleDoc = await saleRef.get();
-
-      if (!saleDoc.exists) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Error: Venta no encontrada'),
-              backgroundColor: AppTheme.danger,
-            ),
-          );
-        }
-        return;
-      }
-
-      final saleData = saleDoc.data()!;
-
-      // Prepare updates
-      final Map<String, dynamic> updates = {
-        'deliveryStatus': newStatus,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      if (newStatus == 'picked_up') {
-        updates['pickedUpAt'] = FieldValue.serverTimestamp();
-      } else if (newStatus == 'delivered') {
-        // Ensure pickedUpAt exists
-        if (saleData['pickedUpAt'] == null) {
-          updates['pickedUpAt'] = FieldValue.serverTimestamp();
-        }
-        updates['deliveredAt'] = FieldValue.serverTimestamp();
-
-        // Deduct stock if in_transit
-        final stockStatus = saleData['stockStatus'] as String? ?? 'completed';
-        if (stockStatus == 'in_transit') {
-          final batch = FirebaseFirestore.instance.batch();
-          final items = saleData['items'] as List<dynamic>;
-          final deductFrom = saleData['deductFrom'] as String? ?? 'store';
-          final stockField =
-              deductFrom == 'warehouse' ? 'stockWarehouse' : 'stockStore';
-
-          for (final item in items) {
-            final barcode = item['barcode'] as String;
-            final quantity = item['quantity'] as int;
-            final productRef =
-                FirebaseFirestore.instance.collection('products').doc(barcode);
-            batch.update(productRef, {
-              stockField: FieldValue.increment(-quantity),
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-          }
-
-          updates['stockStatus'] = 'completed';
-          batch.update(saleRef, updates);
-          await batch.commit();
-        } else {
-          await saleRef.update(updates);
-        }
-      } else {
-        await saleRef.update(updates);
-      }
-
+      await SalesRepository.instance.updateDeliveryStatus(saleId, newStatus);
       if (mounted) {
-        final statusLabel = newStatus == 'picked_up' ? 'Recogido' : 'Entregado';
+        final label =
+            newStatus == DeliveryStatus.pickedUp ? 'Recogido' : 'Entregado';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -565,7 +504,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                 const SizedBox(width: AppTheme.spacingM),
                 Expanded(
                   child: Text(
-                    'Pedido marcado como $statusLabel',
+                    'Pedido marcado como $label',
                     style: AppTheme.bodySmall.copyWith(color: AppTheme.white),
                   ),
                 ),
@@ -576,8 +515,6 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
             duration: const Duration(seconds: 2),
           ),
         );
-
-        // Reload orders to reflect change
         _loadOrders();
       }
     } catch (e) {

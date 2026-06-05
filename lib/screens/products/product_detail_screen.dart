@@ -2384,11 +2384,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         Row(
           children: [
             IconButton(
-              onPressed: () {
-                final newValue = currentAdjustment - 1;
-                // TODO fix
-                controller.text = newValue.toString();
-              },
+              onPressed: () =>
+                  setState(() => controller.text = (currentAdjustment - 1).toString()),
               icon: const Icon(Icons.remove_circle_outline_rounded),
               color: AppTheme.danger,
               tooltip: 'Restar 1',
@@ -2437,10 +2434,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ),
             IconButton(
-              onPressed: () {
-                final newValue = currentAdjustment + 1;
-                controller.text = newValue.toString();
-              },
+              onPressed: () =>
+                  setState(() => controller.text = (currentAdjustment + 1).toString()),
               icon: const Icon(Icons.add_circle_outline_rounded),
               color: AppTheme.success,
               tooltip: 'Sumar 1',

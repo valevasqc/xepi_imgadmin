@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
-import 'package:xepi_imgadmin/services/expenses_service.dart';
+import 'package:xepi_imgadmin/constants/constants.dart';
+import 'package:xepi_imgadmin/repositories/finance_repository.dart';
 import 'package:xepi_imgadmin/services/auth_service.dart';
 
 class FinancesScreen extends StatefulWidget {
@@ -41,13 +42,13 @@ class _FinancesScreenState extends State<FinancesScreen> {
             .orderBy('createdAt', descending: true)
             .limit(50)
             .get(),
-        ExpensesService.fetchExpenses(),
+        FinanceRepository.instance.fetchExpensesRaw(),
         _firestore
             .collection('deposits')
             .orderBy('createdAt', descending: true)
             .limit(20)
             .get(),
-        ExpensesService.fetchCategories(),
+        FinanceRepository.instance.fetchCategoriesRaw(),
       ]);
 
       final salesSnapshot = results[0] as QuerySnapshot;
@@ -644,14 +645,16 @@ class _FinancesScreenState extends State<FinancesScreen> {
                       content: Text('Complete todos los campos')));
                   return;
                 }
+                final currentUser = AuthService.currentUser;
+                if (currentUser == null) return;
                 final amount = double.tryParse(amountCtrl.text) ?? 0;
-                await ExpensesService.addExpense(
+                await FinanceRepository.instance.addExpense(
                   amount: amount,
                   category: selectedCategory!,
                   categoryType: categoryType,
                   description: descCtrl.text.trim(),
-                  createdBy: AuthService.currentUser?.uid ?? 'admin',
-                  status: 'approved', // Admin adds directly as approved
+                  createdBy: currentUser.uid,
+                  status: ExpenseStatus.approved,
                 );
                 await _loadData();
                 if (context.mounted) {
@@ -794,7 +797,7 @@ class _FinancesScreenState extends State<FinancesScreen> {
             FilledButton(
               onPressed: () async {
                 if (nameCtrl.text.trim().isNotEmpty) {
-                  await ExpensesService.addCategory(nameCtrl.text.trim(), type);
+                  await FinanceRepository.instance.addCategory(nameCtrl.text.trim(), type);
                   await _loadData();
                 }
                 if (context.mounted) Navigator.pop(context);
@@ -846,7 +849,8 @@ class _FinancesScreenState extends State<FinancesScreen> {
                 child: const Text('Cancelar')),
             FilledButton(
               onPressed: () async {
-                await ExpensesService.updateCategory(cat['id'] as String,
+                await FinanceRepository.instance.updateCategory(
+                    cat['id'] as String,
                     name: nameCtrl.text.trim(), type: type);
                 await _loadData();
                 if (context.mounted) Navigator.pop(context);
@@ -860,7 +864,7 @@ class _FinancesScreenState extends State<FinancesScreen> {
   }
 
   Future<void> _deleteCategoryInDialog(Map<String, dynamic> cat) async {
-    await ExpensesService.deleteCategory(cat['id'] as String);
+    await FinanceRepository.instance.deleteCategory(cat['id'] as String);
     await _loadData();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

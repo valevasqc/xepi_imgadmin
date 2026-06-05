@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/utils/date_formatter.dart';
+import 'package:xepi_imgadmin/constants/constants.dart';
+import 'package:xepi_imgadmin/repositories/sales_repository.dart';
 import 'package:xepi_imgadmin/services/auth_service.dart';
 
 class SaleDetailScreen extends StatefulWidget {
@@ -64,231 +66,19 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
 
   Future<void> _updateDeliveryStatus(String newStatus) async {
     setState(() => _isProcessing = true);
-
     try {
-      final updates = <String, dynamic>{
-        'deliveryStatus': newStatus,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      // Handle moving forward
-      if (newStatus == 'picked_up') {
-        updates['pickedUpAt'] = FieldValue.serverTimestamp();
-        await _firestore.collection('sales').doc(widget.saleId).update(updates);
-      } else if (newStatus == 'delivered') {
-        // Ensure pickedUpAt exists when jumping to delivered
-        if (_saleData!['pickedUpAt'] == null) {
-          updates['pickedUpAt'] = FieldValue.serverTimestamp();
-        }
-        updates['deliveredAt'] = FieldValue.serverTimestamp();
-
-        // When delivered, deduct stock if it was in_transit
-        final stockStatus = _saleData!['stockStatus'] as String?;
-        final paymentMethod = _saleData!['paymentMethod'] as String?;
-        final saleType = _saleData!['saleType'] as String?;
-        final deliveryMethod = _saleData!['deliveryMethod'] as String?;
-
-        if (stockStatus == 'in_transit') {
-          final batch = _firestore.batch();
-
-          // Update sale to completed stock status
-          batch.update(
-            _firestore.collection('sales').doc(widget.saleId),
-            {...updates, 'stockStatus': 'completed'},
-          );
-
-          // Deduct stock from products
-          final deductFrom = _saleData!['deductFrom'] as String? ?? 'store';
-          final stockField =
-              deductFrom == 'store' ? 'stockStore' : 'stockWarehouse';
-          final items = _saleData!['items'] as List<dynamic>;
-
-          for (var item in items) {
-            final barcode = item['barcode'] as String;
-            final quantity = item['quantity'] as int;
-            final productRef = _firestore.collection('products').doc(barcode);
-
-            batch.update(productRef, {
-              stockField: FieldValue.increment(-quantity),
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-          }
-
-          // Add to pending cash if efectivo delivery sale
-          if (paymentMethod == 'efectivo' && saleType == 'delivery') {
-            String cashSource;
-            if (deliveryMethod == 'mensajero') {
-              cashSource = 'mensajero';
-            } else if (deliveryMethod == 'forza') {
-              cashSource = 'forza';
-            } else {
-              // Default to store if delivery method is missing
-              cashSource = 'store';
-            }
-
-            final pendingCashRef =
-                _firestore.collection('pendingCash').doc(cashSource);
-            final total = (_saleData!['total'] as num?)?.toDouble() ?? 0.0;
-
-            batch.set(
-              pendingCashRef,
-              {
-                'source': cashSource,
-                'amount': FieldValue.increment(total),
-                'saleIds': FieldValue.arrayUnion([widget.saleId]),
-                'updatedAt': FieldValue.serverTimestamp(),
-              },
-              SetOptions(merge: true),
-            );
-          }
-
-          await batch.commit();
-        } else {
-          await _firestore
-              .collection('sales')
-              .doc(widget.saleId)
-              .update(updates);
-        }
-      } else if (newStatus == 'cash_received') {
-        // Ensure timestamps exist when jumping to cash_received
-        if (_saleData!['pickedUpAt'] == null) {
-          updates['pickedUpAt'] = FieldValue.serverTimestamp();
-        }
-        if (_saleData!['deliveredAt'] == null) {
-          updates['deliveredAt'] = FieldValue.serverTimestamp();
-        }
-        updates['cashReceivedAt'] = FieldValue.serverTimestamp();
-
-        // When cash_received, ensure stock deducted and add to pending cash if not already there
-        final stockStatus = _saleData!['stockStatus'] as String?;
-        final paymentMethod = _saleData!['paymentMethod'] as String?;
-        final saleType = _saleData!['saleType'] as String?;
-        final deliveryMethod = _saleData!['deliveryMethod'] as String?;
-
-        final batch = _firestore.batch();
-
-        // Update sale with new status
-        batch.update(
-          _firestore.collection('sales').doc(widget.saleId),
-          {...updates, if (stockStatus == 'in_transit') 'stockStatus': 'completed'},
-        );
-
-        // Deduct stock if still in_transit
-        if (stockStatus == 'in_transit') {
-          final deductFrom = _saleData!['deductFrom'] as String? ?? 'store';
-          final stockField =
-              deductFrom == 'store' ? 'stockStore' : 'stockWarehouse';
-          final items = _saleData!['items'] as List<dynamic>;
-
-          for (var item in items) {
-            final barcode = item['barcode'] as String;
-            final quantity = item['quantity'] as int;
-            final productRef = _firestore.collection('products').doc(barcode);
-
-            batch.update(productRef, {
-              stockField: FieldValue.increment(-quantity),
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-          }
-        }
-
-        // Add to pending cash if efectivo delivery and not already in deposit
-        if (paymentMethod == 'efectivo' && saleType == 'delivery' && _saleData!['depositId'] == null) {
-          String cashSource;
-          if (deliveryMethod == 'mensajero') {
-            cashSource = 'mensajero';
-          } else if (deliveryMethod == 'forza') {
-            cashSource = 'forza';
-          } else {
-            cashSource = 'store';
-          }
-
-          final pendingCashRef =
-              _firestore.collection('pendingCash').doc(cashSource);
-          final total = (_saleData!['total'] as num?)?.toDouble() ?? 0.0;
-
-          batch.set(
-            pendingCashRef,
-            {
-              'source': cashSource,
-              'amount': FieldValue.increment(total),
-              'saleIds': FieldValue.arrayUnion([widget.saleId]),
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-            SetOptions(merge: true),
-          );
-        }
-
-        await batch.commit();
-      } else if (newStatus == 'pending') {
-        // Moving back to pending - clear all timestamps and restore stock if needed
-        updates['pickedUpAt'] = null;
-        updates['deliveredAt'] = null;
-        updates['cashReceivedAt'] = null;
-
-        final stockStatus = _saleData!['stockStatus'] as String?;
-        final paymentMethod = _saleData!['paymentMethod'] as String?;
-        final saleType = _saleData!['saleType'] as String?;
-        final deliveryMethod = _saleData!['deliveryMethod'] as String?;
-
-        if (stockStatus == 'completed') {
-          final batch = _firestore.batch();
-
-          batch.update(
-            _firestore.collection('sales').doc(widget.saleId),
-            {...updates, 'stockStatus': 'in_transit'},
-          );
-
-          // Restore stock
-          final deductFrom = _saleData!['deductFrom'] as String? ?? 'store';
-          final stockField =
-              deductFrom == 'store' ? 'stockStore' : 'stockWarehouse';
-          final items = _saleData!['items'] as List<dynamic>;
-
-          for (var item in items) {
-            final barcode = item['barcode'] as String;
-            final quantity = item['quantity'] as int;
-            final productRef = _firestore.collection('products').doc(barcode);
-
-            batch.update(productRef, {
-              stockField: FieldValue.increment(quantity),
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-          }
-
-          // Remove from pending cash if efectivo delivery sale
-          if (paymentMethod == 'efectivo' && saleType == 'delivery') {
-            String cashSource;
-            if (deliveryMethod == 'mensajero') {
-              cashSource = 'mensajero';
-            } else if (deliveryMethod == 'forza') {
-              cashSource = 'forza';
-            } else {
-              cashSource = 'store';
-            }
-
-            final pendingCashRef =
-                _firestore.collection('pendingCash').doc(cashSource);
-            final total = (_saleData!['total'] as num?)?.toDouble() ?? 0.0;
-
-            batch.update(pendingCashRef, {
-              'amount': FieldValue.increment(-total),
-              'saleIds': FieldValue.arrayRemove([widget.saleId]),
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-          }
-
-          await batch.commit();
-        } else {
-          await _firestore
-              .collection('sales')
-              .doc(widget.saleId)
-              .update(updates);
-        }
+      final typed = DeliveryStatus.fromString(newStatus);
+      if (typed != null) {
+        // Known status — atomic update via repository (handles stock + pendingCash).
+        await SalesRepository.instance
+            .updateDeliveryStatus(widget.saleId, typed);
       } else {
-        await _firestore.collection('sales').doc(widget.saleId).update(updates);
+        // Legacy status string (e.g. 'completed') — simple field update only.
+        await _firestore.collection('sales').doc(widget.saleId).update({
+          'deliveryStatus': newStatus,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       }
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -297,22 +87,13 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 const Icon(Icons.check_circle_outline_rounded,
                     color: AppTheme.white),
                 const SizedBox(width: AppTheme.spacingM),
-                Expanded(
-                  child: Text(
-                    newStatus == 'picked_up'
-                        ? 'Pedido marcado como recogido'
-                        : newStatus == 'delivered'
-                            ? 'Pedido entregado y stock actualizado'
-                            : 'Pedido marcado como completado',
-                  ),
-                ),
+                Expanded(child: Text(_statusUpdateMessage(newStatus))),
               ],
             ),
             backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
           ),
         );
-
         await _loadSaleData();
       }
     } catch (e) {
@@ -325,9 +106,20 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  String _statusUpdateMessage(String status) {
+    switch (status) {
+      case 'picked_up':
+        return 'Pedido marcado como recogido';
+      case 'delivered':
+        return 'Pedido entregado y stock actualizado';
+      case 'cash_received':
+        return 'Efectivo recibido';
+      default:
+        return 'Estado actualizado';
     }
   }
 

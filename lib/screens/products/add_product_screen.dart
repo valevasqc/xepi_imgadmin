@@ -18,6 +18,7 @@ class AddProductScreen extends StatefulWidget {
 class _AddProductScreenState extends State<AddProductScreen> {
   final _formKey = GlobalKey<FormState>();
   final _barcodeController = TextEditingController();
+  final _barcodeFocusNode = FocusNode();
   final _nameController = TextEditingController();
   final _warehouseCodeController = TextEditingController();
   final _widthController = TextEditingController();
@@ -147,6 +148,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   void dispose() {
     _barcodeController.dispose();
+    _barcodeFocusNode.dispose();
     _nameController.dispose();
     _warehouseCodeController.dispose();
     _widthController.dispose();
@@ -207,6 +209,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               Expanded(
                                 child: TextFormField(
                                   controller: _barcodeController,
+                                  focusNode: _barcodeFocusNode,
                                   decoration: const InputDecoration(
                                     hintText: 'Escanear o ingresar código',
                                     prefixIcon: Icon(Icons.qr_code_rounded),
@@ -221,17 +224,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               ),
                               const SizedBox(width: AppTheme.spacingM),
                               ElevatedButton.icon(
-                                onPressed: () {
-                                  // TODO: Open barcode scanner
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          'Función de escáner próximamente'),
-                                    ),
-                                  );
-                                },
+                                onPressed: () =>
+                                    _barcodeFocusNode.requestFocus(),
                                 icon: const Icon(Icons.qr_code_scanner_rounded),
-                                label: const Text('Escanear'),
+                                label: const Text('Enfocar escáner'),
                               ),
                             ],
                           ),

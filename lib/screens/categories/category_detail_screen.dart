@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/services/auth_service.dart';
+import 'package:xepi_imgadmin/screens/products/product_detail_screen.dart';
 
 /// Category detail screen: manage cover image and reorder products
 class CategoryDetailScreen extends StatefulWidget {
@@ -366,7 +367,6 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
               if (AuthService.isSuperuser) ...[
                 OutlinedButton.icon(
                   onPressed: _editBulkPricing,
-                  // TODO edit quantities too
                   icon: const Icon(Icons.local_offer_rounded, size: 18),
                   label: const Text('Precio por Mayor'),
                 ),
@@ -400,7 +400,6 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
           // Name
           Text(
             'Nombre',
-            // TODO what does this modify ??
             style: AppTheme.bodySmall.copyWith(
               color: AppTheme.mediumGray,
               fontWeight: FontWeight.w600,
@@ -1023,7 +1022,16 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
     return Card(
       key: ValueKey(product['id']),
       elevation: 2,
-      child: Column(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                ProductDetailScreen(productId: product['id'] as String),
+          ),
+        ),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Image
@@ -1104,6 +1112,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

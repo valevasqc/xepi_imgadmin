@@ -480,7 +480,7 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
       final user = _auth.currentUser;
       if (user == null) throw Exception('Usuario no autenticado');
 
-      final batch = _firestore.batch();
+      // Pre-generate sale document ID so it can be referenced inside the transaction
       final saleRef = _firestore.collection('sales').doc();
 
       // Prepare sale items
@@ -505,8 +505,8 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
         'saleType': _saleType,
         'deliveryMethod': _saleType == 'delivery' ? _deliveryMethod : null,
         'paymentMethod': _paymentMethod,
-        'destinationAccount': (_paymentMethod == 'transferencia' || _paymentMethod == 'tarjeta') 
-            ? _selectedBankAccount 
+        'destinationAccount': (_paymentMethod == 'transferencia' || _paymentMethod == 'tarjeta')
+            ? _selectedBankAccount
             : null,
         'items': items,
         'subtotal': _subtotal,
@@ -535,47 +535,62 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       };
 
-      batch.set(saleRef, saleData);
-
-      // Track pending cash for efectivo sales (only for kiosko, deliveries add when delivered)
-      if (_paymentMethod == 'efectivo' &&
-          status == 'approved' &&
-          _saleType == 'kiosko') {
-        // Add to pending cash for store
-        final pendingCashRef =
-            _firestore.collection('pendingCash').doc('store');
-
-        batch.set(
-          pendingCashRef,
-          {
-            'source': 'store',
-            'amount': FieldValue.increment(_total),
-            'saleIds': FieldValue.arrayUnion([saleRef.id]),
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      }
-
-      // Update stock: if approved and completed, deduct now; if in_transit, track separately
-      if (status == 'approved' && stockStatus == 'completed') {
-        final stockField =
-            _deductFrom == 'store' ? 'stockStore' : 'stockWarehouse';
-
-        for (var item in _cartItems.values) {
-          final barcode = item['barcode'] as String;
-          final quantity = item['quantity'] as int;
-          final productRef = _firestore.collection('products').doc(barcode);
-
-          batch.update(productRef, {
-            stockField: FieldValue.increment(-quantity),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+      // Use a transaction so stock check + deduction are atomic.
+      // All reads must happen before any writes inside runTransaction.
+      await _firestore.runTransaction((txn) async {
+        // 1. Reads first: validate live stock for kiosko efectivo sales (the only
+        //    case where stock is deducted immediately at creation).
+        final stockField = _deductFrom == 'store' ? 'stockStore' : 'stockWarehouse';
+        if (status == 'approved' && stockStatus == 'completed') {
+          for (final item in _cartItems.values) {
+            final barcode = item['barcode'] as String;
+            final qty = item['quantity'] as int;
+            final snap = await txn.get(
+              _firestore.collection('products').doc(barcode),
+            );
+            final live = (snap.data()?[stockField] ?? 0) as int;
+            if (live < qty) {
+              throw Exception('Stock insuficiente: ${item['name']}');
+            }
+          }
         }
-      }
-      // If in_transit, we'll track in a separate field (Phase 2B)
 
-      await batch.commit();
+        // 2. Writes (all reads done above).
+        txn.set(saleRef, saleData);
+
+        // Track pending cash for efectivo kiosko sales.
+        if (_paymentMethod == 'efectivo' &&
+            status == 'approved' &&
+            _saleType == 'kiosko') {
+          final pendingCashRef =
+              _firestore.collection('pendingCash').doc('store');
+          txn.set(
+            pendingCashRef,
+            {
+              'source': 'store',
+              'amount': FieldValue.increment(_total),
+              'saleIds': FieldValue.arrayUnion([saleRef.id]),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        }
+
+        // Deduct stock atomically.
+        if (status == 'approved' && stockStatus == 'completed') {
+          for (final item in _cartItems.values) {
+            final barcode = item['barcode'] as String;
+            final qty = item['quantity'] as int;
+            txn.update(
+              _firestore.collection('products').doc(barcode),
+              {
+                stockField: FieldValue.increment(-qty),
+                'updatedAt': FieldValue.serverTimestamp(),
+              },
+            );
+          }
+        }
+      });
 
       if (mounted) {
         // Show success dialog with options
@@ -1220,7 +1235,7 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                     style: AppTheme.bodyMedium
                         .copyWith(fontWeight: FontWeight.w600)),
                 if (isBulkPriced) ...[
-                  Text('$barcode',
+                  Text(barcode,
                       style: AppTheme.bodySmall),
                   Row(
                     children: [
@@ -1486,9 +1501,9 @@ class _RegisterSaleScreenState extends State<RegisterSaleScreen> {
                   value: _selectedBankAccount,
                   hint: const Text('Selecciona cuenta bancaria'),
                   items: _bankAccounts.map<DropdownMenuItem<String>>((account) {
-                    final accountName = account['accountName'] as String;
-                    final bankName = account['bankName'] as String;
-                    final last4 = account['last4Digits'] as String;
+                    final accountName = (account['accountName'] as String?) ?? 'Cuenta';
+                    final bankName = (account['bankName'] as String?) ?? '';
+                    final last4 = (account['last4Digits'] as String?) ?? '****';
                     return DropdownMenuItem<String>(
                       value: account['id'],
                       child: Text('$accountName - $bankName (*$last4)'),

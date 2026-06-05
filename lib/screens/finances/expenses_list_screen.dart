@@ -71,7 +71,7 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
   Widget build(BuildContext context) {
     final expenses = _expenses;
     final total = expenses.fold<double>(
-        0, (sum, e) => sum + ((e['amount'] as num).toDouble()));
+        0, (sum, e) => sum + ((e['amount'] as num?) ?? 0).toDouble());
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundGray,
@@ -207,7 +207,7 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        e['category'] as String,
+                        (e['category'] as String?) ?? '',
                         style: AppTheme.caption.copyWith(
                           color: e['type'] == 'operativo'
                               ? AppTheme.blue
@@ -225,7 +225,7 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(e['description'] as String, style: AppTheme.bodyMedium),
+                Text((e['description'] as String?) ?? '', style: AppTheme.bodyMedium),
                 if (paymentSource != null) ...[
                   const SizedBox(height: 4),
                   if (paymentSource == 'efectivo')
@@ -259,7 +259,7 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
               ],
             ),
           ),
-          Text('Q${(e['amount'] as double).toStringAsFixed(2)}',
+          Text('Q${((e['amount'] as num?) ?? 0).toDouble().toStringAsFixed(2)}',
               style: AppTheme.bodyMedium.copyWith(
                   color: AppTheme.danger, fontWeight: FontWeight.w700)),
           const SizedBox(width: AppTheme.spacingM),
@@ -348,7 +348,7 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
               ),
               const SizedBox(height: AppTheme.spacingM),
               DropdownButtonFormField<String>(
-                value: selectedPaymentSource,
+                initialValue: selectedPaymentSource,
                 decoration: const InputDecoration(labelText: 'Método de Pago'),
                 items: [
                   const DropdownMenuItem(
@@ -356,8 +356,8 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
                     child: Text('Efectivo'),
                   ),
                   ..._bankAccounts.map((account) {
-                    final accountName = account['accountName'] as String;
-                    final last4 = account['last4Digits'] as String;
+                    final accountName = (account['accountName'] as String?) ?? 'Cuenta';
+                    final last4 = (account['last4Digits'] as String?) ?? '****';
                     return DropdownMenuItem(
                       value: account['id'],
                       child: Text('$accountName (*$last4)'),
@@ -396,13 +396,15 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
               child: const Text('Cancelar')),
           FilledButton(
             onPressed: () async {
+              final uid = AuthService.currentUser?.uid;
+              if (uid == null) return;
               final amount = double.tryParse(amountCtrl.text) ?? 0;
               await ExpensesService.addExpense(
                 amount: amount,
                 category: category,
                 categoryType: type,
                 description: descCtrl.text.trim(),
-                createdBy: AuthService.currentUser?.uid ?? 'unknown',
+                createdBy: uid,
                 paymentSource: selectedPaymentSource ?? 'efectivo',
               );
               if (context.mounted) Navigator.pop(context);

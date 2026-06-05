@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
+import 'package:xepi_imgadmin/constants/constants.dart';
+import 'package:xepi_imgadmin/repositories/sales_repository.dart';
 import 'package:xepi_imgadmin/utils/date_formatter.dart';
 import 'package:xepi_imgadmin/widgets/status_filter_chips.dart';
 import 'package:xepi_imgadmin/screens/sales/register_sale_screen.dart';
@@ -538,13 +540,13 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   Widget _buildSaleCard(Map<String, dynamic> sale) {
     final saleId = sale['saleId'] as String;
     final date = sale['createdAt'] as Timestamp?;
-    final saleType = sale['saleType'] as String;
-    final paymentMethod = sale['paymentMethod'] as String;
-    final total = (sale['total'] as num).toDouble();
+    final saleType = (sale['saleType'] as String?) ?? 'kiosko';
+    final paymentMethod = (sale['paymentMethod'] as String?) ?? 'efectivo';
+    final total = ((sale['total'] as num?) ?? 0).toDouble();
     final items = (sale['items'] as List?)?.length ?? 0;
     final customerName = sale['customerName'] as String?;
-    final paymentVerified = sale['paymentVerified'] as bool;
-    final status = sale['status'] as String;
+    final paymentVerified = (sale['paymentVerified'] as bool?) ?? false;
+    final status = (sale['status'] as String?) ?? 'pending_approval';
     final deliveryStatus = sale['deliveryStatus'] as String? ?? 'pending';
     final isDelivery = saleType == 'delivery';
 
@@ -798,144 +800,23 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     if (!mounted) return;
 
     try {
-      final saleRef =
-          FirebaseFirestore.instance.collection('sales').doc(saleId);
-      final saleDoc = await saleRef.get();
-
-      if (!mounted) return;
-
-      if (!saleDoc.exists) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Error: Venta no encontrada'),
-              backgroundColor: AppTheme.danger,
-            ),
-          );
-        }
-        return;
-      }
-
-      final saleData = saleDoc.data()!;
-
-      // Prepare updates
-      final Map<String, dynamic> updates = {
-        'deliveryStatus': newStatus,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      if (newStatus == 'picked_up') {
-        updates['pickedUpAt'] = FieldValue.serverTimestamp();
-      } else if (newStatus == 'delivered') {
-        // Ensure pickedUpAt exists
-        if (saleData['pickedUpAt'] == null) {
-          updates['pickedUpAt'] = FieldValue.serverTimestamp();
-        }
-        updates['deliveredAt'] = FieldValue.serverTimestamp();
-
-        // Add to pending cash if efectivo payment
-        final paymentMethod =
-            saleData['paymentMethod'] as String? ?? 'efectivo';
-        if (paymentMethod == 'efectivo') {
-          // Determine cash source
-          final saleType = saleData['saleType'] as String? ?? 'delivery';
-          final deliveryMethod = saleData['deliveryMethod'] as String?;
-          String cashSource;
-          if (saleType == 'kiosko') {
-            cashSource = 'store';
-          } else if (deliveryMethod == 'mensajero') {
-            cashSource = 'mensajero';
-          } else {
-            cashSource = 'forza';
-          }
-
-          // Add to pending cash
-          final total = saleData['total'] as num;
-          final pendingCashRef = FirebaseFirestore.instance
-              .collection('pendingCash')
-              .doc(cashSource);
-
-          final batch = FirebaseFirestore.instance.batch();
-          batch.set(
-            pendingCashRef,
-            {
-              'source': cashSource,
-              'amount': FieldValue.increment(total.toDouble()),
-              'saleIds': FieldValue.arrayUnion([saleId]),
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-            SetOptions(merge: true),
-          );
-
-          // Update sale with pending cash tracking
-          updates['pendingCashSource'] = cashSource;
-
-          // Handle stock deduction
-          final stockStatus = saleData['stockStatus'] as String? ?? 'completed';
-          if (stockStatus == 'in_transit') {
-            final items = saleData['items'] as List<dynamic>;
-            final deductFrom = saleData['deductFrom'] as String? ?? 'store';
-            final stockField =
-                deductFrom == 'warehouse' ? 'stockWarehouse' : 'stockStore';
-
-            for (final item in items) {
-              final barcode = item['barcode'] as String;
-              final quantity = item['quantity'] as int;
-              final productRef = FirebaseFirestore.instance
-                  .collection('products')
-                  .doc(barcode);
-              batch.update(productRef, {
-                stockField: FieldValue.increment(-quantity),
-                'updatedAt': FieldValue.serverTimestamp(),
-              });
-            }
-
-            updates['stockStatus'] = 'completed';
-          }
-
-          batch.update(saleRef, updates);
-          await batch.commit();
-        } else {
-          // Non-efectivo: just handle stock deduction
-          final stockStatus = saleData['stockStatus'] as String? ?? 'completed';
-          if (stockStatus == 'in_transit') {
-            final batch = FirebaseFirestore.instance.batch();
-            final items = saleData['items'] as List<dynamic>;
-            final deductFrom = saleData['deductFrom'] as String? ?? 'store';
-            final stockField =
-                deductFrom == 'warehouse' ? 'stockWarehouse' : 'stockStore';
-
-            for (final item in items) {
-              final barcode = item['barcode'] as String;
-              final quantity = item['quantity'] as int;
-              final productRef = FirebaseFirestore.instance
-                  .collection('products')
-                  .doc(barcode);
-              batch.update(productRef, {
-                stockField: FieldValue.increment(-quantity),
-                'updatedAt': FieldValue.serverTimestamp(),
-              });
-            }
-
-            updates['stockStatus'] = 'completed';
-            batch.update(saleRef, updates);
-            await batch.commit();
-          } else {
-            await saleRef.update(updates);
-          }
-        }
-      } else if (newStatus == 'completed') {
-        // Ensure timestamps exist
-        if (saleData['pickedUpAt'] == null) {
-          updates['pickedUpAt'] = FieldValue.serverTimestamp();
-        }
-        if (saleData['deliveredAt'] == null) {
-          updates['deliveredAt'] = FieldValue.serverTimestamp();
-        }
-        updates['completedAt'] = FieldValue.serverTimestamp();
-        await saleRef.update(updates);
+      final status = DeliveryStatus.fromString(newStatus);
+      if (status != null) {
+        // Atomic transaction: stock deduction + pending cash handled by repository.
+        await SalesRepository.instance.updateDeliveryStatus(saleId, status);
       } else {
-        await saleRef.update(updates);
+        // 'completed' and any future simple statuses — no stock/cash side effects.
+        final updates = <String, dynamic>{
+          'deliveryStatus': newStatus,
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+        if (newStatus == 'completed') {
+          updates['completedAt'] = FieldValue.serverTimestamp();
+        }
+        await FirebaseFirestore.instance
+            .collection('sales')
+            .doc(saleId)
+            .update(updates);
       }
 
       if (mounted) {

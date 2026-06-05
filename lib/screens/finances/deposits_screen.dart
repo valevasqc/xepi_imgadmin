@@ -33,7 +33,7 @@ class _DepositsScreenState extends State<DepositsScreen> {
   bool _isLoadingAccounts = true;
   
   // Employee expenses paid from cash before deposit
-  List<Map<String, dynamic>> _expenses = [];
+  final List<Map<String, dynamic>> _expenses = [];
 
   final _currencyFormat = NumberFormat.currency(symbol: 'Q', decimalDigits: 2);
   final _dateFormat = DateFormat('dd/MM/yyyy HH:mm');
@@ -1413,7 +1413,7 @@ class _DepositsScreenState extends State<DepositsScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.receipt_rounded, color: AppTheme.orange, size: 20),
+              const Icon(Icons.receipt_rounded, color: AppTheme.orange, size: 20),
               const SizedBox(width: AppTheme.spacingS),
               Text(
                 'Gastos del Efectivo',
@@ -1529,7 +1529,7 @@ class _DepositsScreenState extends State<DepositsScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: category,
+                initialValue: category,
                 decoration: const InputDecoration(labelText: 'Categoría'),
                 items: const [
                   DropdownMenuItem(

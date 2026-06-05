@@ -981,7 +981,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             height: 250,
             child: LineChart(
               LineChartData(
-                gridData: FlGridData(show: true, drawVerticalLine: false),
+                gridData: const FlGridData(show: true, drawVerticalLine: false),
                 titlesData: FlTitlesData(
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
@@ -1124,7 +1124,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 ),
-                gridData: FlGridData(show: true, drawVerticalLine: false),
+                gridData: const FlGridData(show: true, drawVerticalLine: false),
                 borderData: FlBorderData(show: false),
               ),
             ),
@@ -1981,7 +1981,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             height: 200,
             child: LineChart(
               LineChartData(
-                gridData: FlGridData(show: true, drawVerticalLine: false),
+                gridData: const FlGridData(show: true, drawVerticalLine: false),
                 titlesData: FlTitlesData(
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(

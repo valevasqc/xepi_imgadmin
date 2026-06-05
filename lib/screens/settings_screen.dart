@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:xepi_imgadmin/config/app_theme.dart';
 import 'package:xepi_imgadmin/services/auth_service.dart';
@@ -12,9 +14,83 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _whatsappController = TextEditingController(text: '+502 5555-5555');
-  final _nameController = TextEditingController(text: 'Administrador');
-  final _emailController = TextEditingController(text: 'admin@xepi.com');
+  final _whatsappController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+
+  int _productCount = 0;
+  int _categoryCount = 0;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = AuthService.currentUser;
+    _nameController.text = user?.displayName ?? '';
+    _emailController.text = user?.email ?? '';
+    _loadData(user?.uid);
+  }
+
+  Future<void> _loadData(String? uid) async {
+    final db = FirebaseFirestore.instance;
+    final results = await Future.wait([
+      db.collection('products').count().get(),
+      db.collection('categories').count().get(),
+      if (uid != null) db.collection('users').doc(uid).get(),
+    ]);
+
+    if (!mounted) return;
+    setState(() {
+      _productCount = (results[0] as AggregateQuerySnapshot).count ?? 0;
+      _categoryCount = (results[1] as AggregateQuerySnapshot).count ?? 0;
+      if (uid != null && results.length > 2) {
+        final userDoc = results[2] as DocumentSnapshot<Map<String, dynamic>>;
+        if (userDoc.exists) {
+          _whatsappController.text =
+              (userDoc.data()?['whatsapp'] as String?) ?? '';
+        }
+      }
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSaving = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final futures = <Future>[
+        if (_nameController.text.trim() != (user.displayName ?? ''))
+          user.updateDisplayName(_nameController.text.trim()),
+        FirebaseFirestore.instance.collection('users').doc(user.uid).set(
+          {'whatsapp': _whatsappController.text.trim()},
+          SetOptions(merge: true),
+        ),
+      ];
+      await Future.wait(futures);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Configuración guardada'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al guardar: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -90,7 +166,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ),
                                       child: Center(
                                         child: Text(
-                                          'AD',
+                                          _nameController.text.isNotEmpty
+                                              ? _nameController.text
+                                                  .trim()
+                                                  .split(' ')
+                                                  .take(2)
+                                                  .map((w) => w[0].toUpperCase())
+                                                  .join()
+                                              : '?',
                                           style: AppTheme.heading1.copyWith(
                                             color: AppTheme.white,
                                           ),
@@ -234,9 +317,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _buildInfoRow(
                                   'Última Actualización', '23 Oct 2025'),
                               const SizedBox(height: AppTheme.spacingM),
-                              _buildInfoRow('Productos Totales', '612'),
+                              _buildInfoRow('Productos Totales', '$_productCount'),
                               const SizedBox(height: AppTheme.spacingM),
-                              _buildInfoRow('Categorías', '4'),
+                              _buildInfoRow('Categorías', '$_categoryCount'),
                             ],
                           ),
                         ),
@@ -248,18 +331,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           children: [
                             Expanded(
                               child: ElevatedButton.icon(
-                                onPressed: () {
-                                  if (_formKey.currentState!.validate()) {
-                                    // TODO: Save settings
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Configuración guardada'),
-                                        backgroundColor: AppTheme.success,
-                                      ),
-                                    );
-                                  }
-                                },
-                                icon: const Icon(Icons.save_rounded),
+                                onPressed: _isSaving ? null : _saveSettings,
+                                icon: _isSaving
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: AppTheme.white),
+                                      )
+                                    : const Icon(Icons.save_rounded),
                                 label: const Text('Guardar Cambios'),
                                 style: ElevatedButton.styleFrom(
                                   padding:
@@ -372,59 +453,117 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showChangePasswordDialog() {
+    final currentCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    String? errorMsg;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Cambiar Contraseña',
-          style: AppTheme.heading3,
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'Contraseña Actual',
+      builder: (_) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text('Cambiar Contraseña', style: AppTheme.heading3),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (errorMsg != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(AppTheme.spacingM),
+                  decoration: BoxDecoration(
+                    color: AppTheme.danger.withValues(alpha: 0.1),
+                    borderRadius: AppTheme.borderRadiusSmall,
+                  ),
+                  child: Text(errorMsg!,
+                      style: AppTheme.bodySmall
+                          .copyWith(color: AppTheme.danger)),
+                ),
+                const SizedBox(height: AppTheme.spacingM),
+              ],
+              TextField(
+                controller: currentCtrl,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Contraseña Actual'),
               ),
+              const SizedBox(height: AppTheme.spacingM),
+              TextField(
+                controller: newCtrl,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Nueva Contraseña'),
+              ),
+              const SizedBox(height: AppTheme.spacingM),
+              TextField(
+                controller: confirmCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                    labelText: 'Confirmar Nueva Contraseña'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
             ),
-            SizedBox(height: AppTheme.spacingM),
-            TextField(
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'Nueva Contraseña',
-              ),
-            ),
-            SizedBox(height: AppTheme.spacingM),
-            TextField(
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'Confirmar Nueva Contraseña',
-              ),
+            ElevatedButton(
+              onPressed: () async {
+                final current = currentCtrl.text.trim();
+                final newPass = newCtrl.text.trim();
+                final confirm = confirmCtrl.text.trim();
+
+                if (current.isEmpty || newPass.isEmpty) {
+                  setDialogState(
+                      () => errorMsg = 'Completa todos los campos');
+                  return;
+                }
+                if (newPass != confirm) {
+                  setDialogState(
+                      () => errorMsg = 'Las contraseñas no coinciden');
+                  return;
+                }
+                if (newPass.length < 6) {
+                  setDialogState(() =>
+                      errorMsg = 'Mínimo 6 caracteres');
+                  return;
+                }
+
+                try {
+                  final user = FirebaseAuth.instance.currentUser!;
+                  final cred = EmailAuthProvider.credential(
+                    email: user.email!,
+                    password: current,
+                  );
+                  // Capture before async gap to avoid BuildContext-across-await lint.
+                  final messenger = ScaffoldMessenger.of(context);
+                  await user.reauthenticateWithCredential(cred);
+                  await user.updatePassword(newPass);
+
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Contraseña actualizada'),
+                      backgroundColor: AppTheme.success,
+                    ),
+                  );
+                } on FirebaseAuthException catch (e) {
+                  final msg = e.code == 'wrong-password' ||
+                          e.code == 'invalid-credential'
+                      ? 'Contraseña actual incorrecta'
+                      : 'Error: ${e.message}';
+                  setDialogState(() => errorMsg = msg);
+                }
+              },
+              child: const Text('Cambiar'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              // TODO: Change password
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Contraseña actualizada'),
-                  backgroundColor: AppTheme.success,
-                ),
-              );
-            },
-            child: const Text('Cambiar'),
-          ),
-        ],
       ),
-    );
+    ).then((_) {
+      currentCtrl.dispose();
+      newCtrl.dispose();
+      confirmCtrl.dispose();
+    });
   }
 
   void _showLogoutDialog() {

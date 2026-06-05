@@ -67,42 +67,41 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
     
+    // Helper: matches the two known admin UIDs during the migration to Firestore-role-based auth.
+    // Remove this function and its references once users/{uid} documents exist with role:'superuser'.
+    function isKnownAdminUid() {
+      return request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' ||
+             request.auth.uid == 'yMnQBCQrtpblH3yTHd05XLVloZu2';
+    }
+
     // Deposits - Authenticated users can create/read, superuser can do all
     match /deposits/{depositId} {
       allow read, create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && 
-        (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
-         request.auth.uid == 'yMnQBCQrtpblH3yTHd05XLVloZu2');
+      allow update, delete: if isSuperuser() || isKnownAdminUid();
     }
-    
+
     // Expenses - Authenticated users can create, all can read, superuser can update/delete
     match /expenses/{expenseId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && 
-        (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
-         request.auth.uid == 'yMnQBCQrtpblH3yTHd05XLVloZu2');
+      allow update, delete: if isSuperuser() || isKnownAdminUid();
     }
-    
+
     // Expense Categories - Authenticated read, superuser write
     match /expense_categories/{categoryId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && 
-        (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
-         request.auth.uid == 'yMnQBCQrtpblH3yTHd05XLVloZu2');
+      allow write: if isSuperuser() || isKnownAdminUid();
     }
-    
+
     // Users - Admin management
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow write: if isSuperuser();
+      allow write: if isSuperuser() || isKnownAdminUid();
     }
-    
+
     // Bank Accounts - Superuser only (sensitive financial data)
     match /bankAccounts/{accountId} {
-      allow read, write: if isAuthenticated() && 
-        (request.auth.uid == '9QFhlKjJMkXMvrB0ISh1rghfPAl1' || 
-         request.auth.uid == 'yMnQBCQrtpblH3yTHd05XLVloZu2');
+      allow read, write: if isSuperuser() || isKnownAdminUid();
     }
     
     // Notifications - Authenticated only
